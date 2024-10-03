@@ -1,0 +1,6 @@
+
+/out/
+
+/playground/*
+!/playground/*.c
+!/playground/Makefile
