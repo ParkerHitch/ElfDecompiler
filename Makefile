@@ -11,6 +11,11 @@ SRC_DIR = ./src
 SRCS = main.c
 OBJS = $(OUT_DIR)/$(SRCS:%.c=%.o)
 
+# Keep compile-commands.json updated for clangd
+# https://github.com/rizsotto/Bear
+bear:
+	bear -- make all
+
 all: $(OBJS)
 	$(CC) -o $(EXENAME) $^ -L$(LIB_DIR) -l$(LIBNAME)
 

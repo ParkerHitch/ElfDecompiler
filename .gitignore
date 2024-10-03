@@ -1,6 +1,14 @@
-
+# .o folder
 /out/
 
+# Random testing
 /playground/*
 !/playground/*.c
 !/playground/Makefile
+
+# Outputted executable
+/decomp
+
+# Clangd
+/.cache
+/compile_commands.json
