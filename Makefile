@@ -11,8 +11,9 @@ EXENAME = decomp
 OUT_DIR = ./out
 SRC_DIR = ./src
 
-SRCS = main.c
-OBJS = $(OUT_DIR)/$(SRCS:%.c=%.o)
+SRCS = main.c elfParser.c
+HEADERS = elfParser.h
+OBJS = $(addprefix $(OUT_DIR)/,$(SRCS:%.c=%.o))
 
 # Keep compile-commands.json updated for clangd
 # https://github.com/rizsotto/Bear
@@ -20,7 +21,7 @@ bear:
 	bear -- make all
 
 all: $(OBJS) $(LIB)
-	$(CC) -o $(EXENAME) $^ -L$(LIB_DIR) -l$(LIBNAME)
+	$(CC) -o $(EXENAME) $(OBJS) -L$(LIB_DIR) -l$(LIBNAME)
 
 $(OUT_DIR)/%.o : $(SRC_DIR)/%.c
 	$(CC) -o $@ -c $< -I$(INC_DIR)
