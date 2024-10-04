@@ -13,10 +13,17 @@ ParsedElf* readElf(char fname[]) {
     ParsedElf* out = malloc(sizeof(ParsedElf));
     FILE* elff = fopen(fname, "r");
 
+    if (!elff) {
+        printf("Failed to open %s\n", fname);
+        free(out);
+        return NULL;
+    }
+
     // Read in the header
     int headerBad = readHeader(elff, &out->header);
-    if (headerBad < 0) {
+    if (headerBad) {
         // TODO: Error messanging
+        printf("Bad header on elf. Code: %d\n", headerBad);
         free(out);
         fclose(elff);
         return NULL;
@@ -33,8 +40,8 @@ ParsedElf* readElf(char fname[]) {
 int16_t readVAddr(ParsedElf* elf, Elf64_Addr addr);
 
 #define READ_TO_HEADER(header, field, elff) { \
-    result = fread(&header->field, sizeof(header->field), 1, elff); \
-    if (result != sizeof(typeof(header->field))) { \
+    result = fread(&(header->field), sizeof(header->field), 1, elff); \
+    if (result != 1) { \
         return -1; \
     } \
 }
@@ -44,8 +51,9 @@ int readHeader(FILE* elff, Elf64_Ehdr* header) {
 
     // Check elf identifier
     READ_TO_HEADER(header, e_ident, elff);
+    printf("Read ident\n");
     // Check for magic
-    if (!memcmp(header->e_ident, ELFMAG, SELFMAG)) {
+    if (memcmp(header->e_ident, ELFMAG, SELFMAG)) {
         return -1;
     }
     // Make sure we 64bit

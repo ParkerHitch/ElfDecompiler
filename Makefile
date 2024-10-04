@@ -3,8 +3,15 @@ LIB_SUBMOD = ./capstone
 LIB_INSTALL_PREFIX = install
 INC_DIR = $(LIB_SUBMOD)/include
 LIBNAME = capstone
+
+UNAME_P = $(shell uname -p)
+ifeq ($(UNAME_P),x86_64)
+LIB_DIR = $(LIB_SUBMOD)/$(LIB_INSTALL_PREFIX)/lib
+else
 LIB_DIR = $(LIB_SUBMOD)/$(LIB_INSTALL_PREFIX)/lib64
-LIB = $(LIB_SUBMOD)/$(LIB_INSTALL_PREFIX)/lib64/lib$(LIBNAME).a
+endif
+
+LIB = $(LIB_DIR)/lib$(LIBNAME).a
 
 EXENAME = decomp
 
