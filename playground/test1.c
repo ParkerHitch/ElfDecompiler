@@ -25,7 +25,7 @@ int main(void)
 
         cs_free(insn, count);
     } else
-    printf("ERROR: Failed to disassemble given code!\n");
+        printf("ERROR: Failed to disassemble given code!\n");
 
     cs_close(&handle);
 
