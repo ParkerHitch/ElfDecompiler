@@ -14,12 +14,11 @@ int main(int argc, char** argv) {
 
     char* elfName = argv[1];
 
-    if (memcmp(".elf", &elfName[strlen(elfName)-4], 4)){
-        printf("File not .elf\n");
-        return -1;
-    }
-
     ParsedElf* parsedElf = readElf(elfName);
+
+    if (!parsedElf){
+        return -2;
+    }
 
     printf("Hello, Decomp!\n");
 

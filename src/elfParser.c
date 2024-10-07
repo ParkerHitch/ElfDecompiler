@@ -1,6 +1,7 @@
 #include "elfParser.h"
 
 #include <elf.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -77,12 +78,48 @@ ParsedElf* readElf(char fname[]) {
         }
     }
 
+    // Load segments into memory
+    out->segmentMemLocations = malloc(sizeof(Elf64_Addr) * out->programHeaderCount);
+    out->segmentMemLens      = malloc(sizeof(Elf64_Addr) * out->programHeaderCount);
+    out->loadedSegments      = malloc(sizeof(uint8_t*  ) * out->programHeaderCount);
+    for (int i=0; i<out->programHeaderCount; i++) {
+        Elf64_Phdr phdr = out->programHeaders[i];
+        out->segmentMemLocations[i] = phdr.p_vaddr;
+        out->segmentMemLens[i] = phdr.p_memsz;
+
+        out->loadedSegments[i] = calloc(sizeof(uint8_t), phdr.p_memsz);
+
+        fseek(elff, phdr.p_offset, SEEK_SET);
+        result = fread(out->loadedSegments[i], phdr.p_filesz, 1, elff);
+
+        if (result != 1) {
+            printf("Failed to load section into memory\n");
+            // TODO: Better error handling. Return. Same above.
+        }
+    }
+
     return out;
 }
 
-// Read the byte at an address in virtual memory
-// Returns -1 for invalid address
-int16_t readVAddr(ParsedElf* elf, Elf64_Addr addr);
+// Returns a pointer into one of the buffers in the ParsedElf struct corresponding to that virtual address
+// NULL if addr is invalid, i.e. not part of a segment
+uint8_t* readVAddr(ParsedElf* elf, Elf64_Addr addr) {
+    for (int i=0; i<elf->programHeaderCount; i++) {
+        int relativeLoc = addr - elf->segmentMemLocations[i];
+        if (relativeLoc > 0 && relativeLoc < elf->segmentMemLens[i]) {
+            return &(elf->loadedSegments[i][relativeLoc]);
+        }
+    }
+    return NULL;
+}
+
+int getVAddrIndex(ParsedElf* elf, Elf64_Addr addr) {
+    for (int i=0; i<elf->programHeaderCount; i++) {
+        int relativeLoc = addr - elf->segmentMemLocations[i];
+        return i;
+    }
+    return -1;
+}
 
 #define READ_INTO_FIELD(_struct, field, file) { \
     result = fread(&(_struct->field), sizeof(_struct->field), 1, file); \
@@ -216,5 +253,20 @@ void freeParsedElf(ParsedElf *elf){
 
     if (elf->textSection) {
         free(elf->textSection);
+    }
+
+    if (elf->segmentMemLocations) {
+        free(elf->segmentMemLocations);
+    }
+
+    if (elf->segmentMemLens) {
+        free(elf->segmentMemLens);
+    }
+
+    if (elf->loadedSegments) {
+        for (int i=0; i<elf->programHeaderCount; i++){
+            free(elf->loadedSegments[i]);
+        }
+        free(elf->loadedSegments);
     }
 }
