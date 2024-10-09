@@ -78,22 +78,33 @@ ParsedElf* readElf(char fname[]) {
         }
     }
 
+    int loadCount=0;
+    for(int i=0; i<out->programHeaderCount; i++)
+        if (out->programHeaders[i].p_type == PT_LOAD)
+            loadCount++;
+
+    out->loadedSegmentCount = loadCount;
+
     // Load segments into memory
-    out->segmentMemLocations = malloc(sizeof(Elf64_Addr) * out->programHeaderCount);
-    out->segmentMemLens      = malloc(sizeof(Elf64_Addr) * out->programHeaderCount);
-    out->loadedSegments      = malloc(sizeof(uint8_t*  ) * out->programHeaderCount);
+    out->segmentMemLocations = malloc(sizeof(Elf64_Addr) * loadCount);
+    out->segmentMemLens      = malloc(sizeof(Elf64_Addr) * loadCount);
+    out->loadedSegments      = malloc(sizeof(uint8_t*  ) * loadCount);
     for (int i=0; i<out->programHeaderCount; i++) {
         Elf64_Phdr phdr = out->programHeaders[i];
+        if (phdr.p_type != PT_LOAD)
+            continue;
         out->segmentMemLocations[i] = phdr.p_vaddr;
         out->segmentMemLens[i] = phdr.p_memsz;
 
         out->loadedSegments[i] = calloc(sizeof(uint8_t), phdr.p_memsz);
 
+        printf("Segment no: %d, Addr: 0x%08x, MemLen: %d, FileSize: %d\n", i, phdr.p_vaddr, phdr.p_memsz, phdr.p_filesz);
+
         fseek(elff, phdr.p_offset, SEEK_SET);
         result = fread(out->loadedSegments[i], phdr.p_filesz, 1, elff);
 
         if (result != 1) {
-            printf("Failed to load section into memory\n");
+            printf("Failed to load segment into memory. Code: %d\n", result);
             // TODO: Better error handling. Return. Same above.
         }
     }
@@ -104,7 +115,7 @@ ParsedElf* readElf(char fname[]) {
 // Returns a pointer into one of the buffers in the ParsedElf struct corresponding to that virtual address
 // NULL if addr is invalid, i.e. not part of a segment
 uint8_t* readVAddr(ParsedElf* elf, Elf64_Addr addr) {
-    for (int i=0; i<elf->programHeaderCount; i++) {
+    for (int i=0; i<elf->loadedSegmentCount; i++) {
         int relativeLoc = addr - elf->segmentMemLocations[i];
         if (relativeLoc > 0 && relativeLoc < elf->segmentMemLens[i]) {
             return &(elf->loadedSegments[i][relativeLoc]);
@@ -114,9 +125,11 @@ uint8_t* readVAddr(ParsedElf* elf, Elf64_Addr addr) {
 }
 
 int getVAddrIndex(ParsedElf* elf, Elf64_Addr addr) {
-    for (int i=0; i<elf->programHeaderCount; i++) {
+    for (int i=0; i<elf->loadedSegmentCount; i++) {
         int relativeLoc = addr - elf->segmentMemLocations[i];
-        return i;
+        if (relativeLoc > 0 && relativeLoc < elf->segmentMemLens[i]) {
+            return i;
+        }
     }
     return -1;
 }

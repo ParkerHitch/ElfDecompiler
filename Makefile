@@ -3,6 +3,7 @@ LIB_SUBMOD = ./capstone
 LIB_INSTALL_PREFIX = install
 INC_DIR = $(LIB_SUBMOD)/include
 LIBNAME = capstone
+CFLAGS = -g
 
 UNAME_P = $(shell uname -p)
 ifeq ($(UNAME_P),x86_64)
@@ -18,8 +19,8 @@ EXENAME = decomp
 OUT_DIR = ./out
 SRC_DIR = ./src
 
-SRCS = main.c elfParser.c
-HEADERS = elfParser.h
+SRCS = main.c elfParser.c asmParser.c datastructs.c
+HEADERS = elfParser.h asmParser.h datastructs.h
 OBJS = $(addprefix $(OUT_DIR)/,$(SRCS:%.c=%.o))
 
 # Keep compile-commands.json updated for clangd
@@ -28,10 +29,10 @@ bear:
 	bear -- make all
 
 all: $(OBJS) $(LIB)
-	$(CC) -o $(EXENAME) $(OBJS) -L$(LIB_DIR) -l$(LIBNAME)
+	$(CC) -o $(EXENAME) $(OBJS) -L$(LIB_DIR) -l$(LIBNAME) $(CFLAGS)
 
 $(OUT_DIR)/%.o : $(SRC_DIR)/%.c
-	$(CC) -o $@ -c $< -I$(INC_DIR)
+	$(CC) -o $@ -c $< -I$(INC_DIR) $(CFLAGS)
 
 $(LIB): 
 	cd $(LIB_SUBMOD); \

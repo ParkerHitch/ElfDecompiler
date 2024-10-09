@@ -96,6 +96,7 @@ typedef struct _CodeBlock {
 
     // Array of the instructions that get executed for this snippet
     uint instructionCount;
+    uint instructionCapacity;
     cs_insn** instructions;
 
     // What happens after this block executes?
@@ -107,6 +108,8 @@ typedef struct _CodeBlock {
     uint impactCapacity;
 
     // Sections of memory or registers that are dependencies for this block
+    uint dependencyCount;
+    uint dependencyCapacity;
     ProgramData* dependencies;
 
 } CodeBlock;

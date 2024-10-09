@@ -1,6 +1,10 @@
 #include <elf.h>
 #include <stdint.h>
 
+
+#ifndef ELF_PARSER
+#define ELF_PARSER
+
 // A structure representing all the data we need for this bare-bones decompiler
 // Please only calloc, for nullptrs in all fields
 typedef struct _ParsedElf {
@@ -25,6 +29,7 @@ typedef struct _ParsedElf {
     Elf64_Half textSectionInd;
 
 
+    unsigned int loadedSegmentCount;
     // Extracted from the headers. Virtual addresses where each segment is loaded.
     Elf64_Addr* segmentMemLocations;
     // Extracted from the headers. Length of memory block where each segment is loaded.
@@ -47,3 +52,4 @@ int getVAddrIndex(ParsedElf* elf, Elf64_Addr addr);
 
 // Releases all memory ascociated with a parsed elf
 void freeParsedElf(ParsedElf* elf);
+#endif
