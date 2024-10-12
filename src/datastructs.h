@@ -1,4 +1,5 @@
 #include <capstone/capstone.h>
+#include <capstone/x86.h>
 #include <elf.h>
 #include <stdint.h>
 
@@ -8,14 +9,15 @@
 // So like an add op doesn't add to 1st opperand like is would in asm.
 
 typedef enum _OperationKind {
-    NOOP,
+    DATA,
+    DEREF,
 
     ADD,
     SUB,
     MUL,
     DIV,
 
-    EQLAL,
+    EQUAL,
     NOTEQAL,
     GREATER,
     LESS,
@@ -24,6 +26,9 @@ typedef enum _OperationKind {
 
     FNCALL,
     FNRETURN,
+    // NOTE: IF YOU EVER UPDATE THIS KNOW THAT WE ARE ASSUMING THAT
+    // ONLY FNCALL, FNRETURN, & DEREF HAVE unaryOperand set. Everything else is binaryOperands
+    // DATA is obviously data tho
 } OperationKind;
 
 // Tag for union ProgramData representing data that can be loaded/modified
@@ -38,21 +43,30 @@ typedef struct _ProgramData {
     ProgramDataKind kind;
     union {
         uint64_t lit;
-        char* reg;
+        x86_reg reg;
         uint64_t adr; // Into program memory
     } info;
 } ProgramData;
 
 typedef struct _Operation {
     OperationKind kind;
+    uint8_t width; // How many bytes this operation results in
     union {
         struct {
-            ProgramData op1;
-            ProgramData op2;
+            struct _Operation* op1;
+            struct _Operation* op2;
         } binaryOperands;
 
-        ProgramData unaryOperand;
+        struct _Operation* unaryOperand;
+        ProgramData data;
     } info;
+
+    // If not NULL, the bottom "overwrittenBy->width" bits of this operation
+    // get overwritten by the the result of overwrittenBy;
+    // NOTE: NOT ACTUALLY USED.
+    // IF YOU START USING ACTUALLY ADD THIS TO LIKE DELETE & COPY FN
+    struct _Operation* overwrittenBy;
+
 } Operation;
 
 
@@ -63,7 +77,9 @@ typedef struct _CodeImpact {
 
     // The location that gets modified by this code
     // Literals cannot be impacted by code, so this is either REGISTER or ADDRESS
-    ProgramData impactedLocation;
+    Operation* impactedLocation;
+    // Segment this impact is located in if the location is in memory
+    x86_reg segment;
     // An ast of operations whose result gets stored in the impacted location
     Operation* impact;
 
@@ -117,7 +133,7 @@ typedef struct _CodeBlock {
 // ### Functions ###
 
 // TODO: Functions
-
+// hahahaha no. Maybe next time
 typedef struct _FunctionBlock {
 
 } FunctionBlock;
@@ -127,10 +143,19 @@ typedef struct _FunctionBlock {
 // ##### Helper functions #####
 
 // Makes a blank code block
-// TODO: Implement
 CodeBlock* initCodeBlock();
 
 // Append an uninitialized instruction block's array
-// TODO: Implement
 void appendBlankInsn(CodeBlock* block, csh* csHandle);
 
+void deleteOperation(Operation* op);
+
+Operation* deepCopyOperation(Operation* op);
+
+Operation* createDataOperation(ProgramDataKind kind, void* data);
+
+bool operationsEquivalent(Operation* op1, Operation* op2);
+
+void printImpacts(CodeBlock* block, csh handle);
+
+void operationToStr(Operation* op, char* outBuff, csh handle);
