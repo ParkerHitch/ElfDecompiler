@@ -13,6 +13,9 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn);
 // Updates block such that its impacts reflects those described by the instruction
 void updateImpactsOfMov(CodeBlock* block, cs_insn* insn);
 
+// Updates block such that its impacts reflects those described by the instruction
+void updateImpactsOfLea(CodeBlock* block, cs_insn* insn);
+
 // Finds the impact ascociated with data in block
 //   If no existing impact creates one.
 CodeImpact* findOrCreateImpact(CodeBlock* block, Operation* location);
@@ -81,6 +84,9 @@ CodeBlock* parseAsmFromInstruction(AsmParserState* parser,
             case X86_INS_MOV:
             case X86_INS_MOVABS:
                 updateImpactsOfMov(block, insn);
+                break;
+            case X86_INS_LEA:
+                updateImpactsOfLea(block, insn);
                 break;
             default:
                 printf("Instruction: %s unknown :(\n", insn->mnemonic);
@@ -182,6 +188,23 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     }
 
     *operationToUpdate = operation;
+}
+
+void updateImpactsOfLea(CodeBlock* block, cs_insn* insn) { 
+    cs_x86 detail = insn->detail->x86;
+    if (detail.op_count != 2){
+        printf("!Bad operand count for lea\n");
+    }
+
+    CodeImpact* impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
+    Operation** operationToUpdate = &impactToUpdate->impact;
+
+    Operation* newVal = memoryOp(block, detail.operands[1].mem);
+
+    if (*operationToUpdate)
+        deleteOperation(*operationToUpdate);
+
+    *operationToUpdate = newVal;
 }
 
 CodeImpact* getImpactToUpdate(CodeBlock* block, cs_x86_op op) {
