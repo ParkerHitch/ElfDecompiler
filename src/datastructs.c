@@ -126,11 +126,12 @@ Operation* deepCopyOperation(Operation* op) {
 }
 
 bool operationsEquivalent(Operation* op1, Operation* op2){
-    if (op1->kind == op2->kind && op1->width==op2->width) {
+    // if (op1->kind == op2->kind && op1->width==op2->width) {
+    if (op1->kind == op2->kind) {
         switch (numOperands(op1->kind)) {
             case 2:
-                return operationsEquivalent(op1->info.binaryOperands.op1, op2->info.binaryOperands.op1);
-                return operationsEquivalent(op1->info.binaryOperands.op2, op2->info.binaryOperands.op2);
+                return operationsEquivalent(op1->info.binaryOperands.op1, op2->info.binaryOperands.op1)
+                       && operationsEquivalent(op1->info.binaryOperands.op2, op2->info.binaryOperands.op2);
                 break;
             case 1:
                 return operationsEquivalent(op1->info.unaryOperand, op2->info.unaryOperand);
@@ -251,6 +252,43 @@ void operationToStr(Operation* op, char* outBuff, csh handle){
             break;
         default:
             printf("WTF!!!\n");
+    }
+}
+
+void deepPrintParsedProgram(ParsedProgram* program, csh handle){
+    ExecutableUnit* unit = program->head;
+    int count = 100;
+    char buff[256];
+
+    while(unit && count > 0) {
+        printf(" 0x%08lx : ", unit->firstInstAddr);
+        switch(unit->kind) {
+            case CODE_BLOCK:
+                printf("Block\n");
+                printImpacts(unit->info.block, handle);
+                break;
+            case WRITE_CALL:
+                printf("Write Call\n");
+                break;
+            case RETURN_NOW:
+                printf("Return\n");
+                break;
+            case JUMP_DEST:
+                printf("Dest %d:\n", unit->info.jumpDestId);
+                break;
+            case JUMP_INSN:
+                if (unit->info.jumpInsn.condition) {
+                    memset(buff, 0, 256);
+                    operationToStr(unit->info.jumpInsn.condition, buff, handle);
+                    printf("Condition: %s\n", buff);
+                    printf("              JumpTo: %d\n", unit->info.jumpInsn.destId);
+                } else {
+                    printf("JumpTo: %d\n", unit->info.jumpInsn.destId);
+                }
+                break;
+        }
+        unit = unit->next;
+        count --;
     }
 }
 

@@ -52,6 +52,11 @@ ParsedElf* readElf(char fname[]) {
 
     out->sectionNames = malloc(sizeof(char*) * out->sectionHeaderCount);
     int strtablestart = out->sectionHeaders[out->header.e_shstrndx].sh_offset;
+
+    int symbolTableStart = 0;
+    int symbolTableEnd = 0;
+    int symbolStrTableStart = 0;
+
     for (int i=0; i<out->sectionHeaderCount; i++) {
         int shstrOff = out->sectionHeaders[i].sh_name;
         fseek(elff, strtablestart + shstrOff, SEEK_SET);
@@ -75,8 +80,40 @@ ParsedElf* readElf(char fname[]) {
             if (result != 1) {
                 printf("Failed to read text section\n");
             }
+        } else if (!strcmp(out->sectionNames[i], ".symtab")) {
+            symbolTableStart = out->sectionHeaders[i].sh_offset;
+            symbolTableEnd = symbolTableStart + out->sectionHeaders[i].sh_size;
+        } else if (!strcmp(out->sectionNames[i], ".strtab")) {
+            symbolStrTableStart = out->sectionHeaders[i].sh_offset;
         }
     }
+
+    if (!symbolStrTableStart || !symbolStrTableStart) {
+        printf("Error! No symbol table\n");
+        return NULL;
+    }
+    do {
+        fseek(elff, symbolTableStart, SEEK_SET);
+        Elf64_Sym sym;
+        fread(&sym, sizeof(Elf64_Sym), 1, elff);
+        fseek(elff, symbolStrTableStart + sym.st_name, SEEK_SET);
+        int count = 0;
+        while (fgetc(elff)) {
+            count ++;
+        }
+        fseek(elff, symbolStrTableStart + sym.st_name, SEEK_SET);
+        char* name = malloc(count);
+        fread(name, count, 1, elff);
+
+        if (!strcmp(name, "main")){
+            printf("Main found: 0x%08lx\n", sym.st_value);
+            out->mainFnStart = sym.st_value;
+            break;
+        }
+
+        symbolTableStart += sizeof(Elf64_Sym);
+
+    } while (symbolTableStart <= symbolTableEnd);
 
     int loadCount=0;
     for(int i=0; i<out->programHeaderCount; i++)

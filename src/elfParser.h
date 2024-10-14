@@ -38,6 +38,8 @@ typedef struct _ParsedElf {
     //   as it would be when executing the .elf
     uint8_t** loadedSegments;
     // Length of above 3 arrays is equal to programHeaderCount
+    
+    Elf64_Addr mainFnStart;
 
 } ParsedElf;
 

@@ -219,3 +219,6 @@ void printImpacts(CodeBlock* block, csh handle);
 void operationToStr(Operation* op, char* outBuff, csh handle);
 
 void printParsedProgram(ParsedProgram* program);
+
+void deepPrintParsedProgram(ParsedProgram* program, csh handle);
+

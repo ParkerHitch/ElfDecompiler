@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+// #define DEBUG_PRINT
+
 // If reg has already been modified this block, a copy of that operation gets substituted
 //   Otherwise simply return a DATA Operation with the register ProgramData as its unaryOperand
 Operation* copyLookupOrCreateRegOp(CodeBlock* block, x86_reg reg);
@@ -52,6 +54,8 @@ ExecutableUnit* findJumpedInside(ParsedProgram* program, Elf64_Addr addr, bool* 
 // NOTE: FOR DEBUG PRINTING ONLY!!
 csh handle;
 
+ExecutableUnit* findUnitAt(ParsedProgram* program, Elf64_Addr addr);
+
 typedef struct _ToBeBlocked {
     struct _ToBeBlocked* next;
     bool isJumpDest;
@@ -98,17 +102,27 @@ void printToBlock(ToBeBlocked* head) {
     }
 }
 
+// Returns true if u1 should go before u2 in the program
+bool shouldGoBefore(ExecutableUnit* u1, ExecutableUnit* u2){
+    if (u1->firstInstAddr < u2->firstInstAddr)
+        return true;
+    if (u1->firstInstAddr == u2->firstInstAddr)
+        return u1->kind == JUMP_DEST;
+    return false;
+}
+
 void insertUnitIntoProgram(ParsedProgram* program, ExecutableUnit* unit) {
-    if (program->head == NULL || unit->firstInstAddr <= program->head->firstInstAddr) {
+    if (program->head == NULL || shouldGoBefore(unit, program->head)) {
         unit->next = program->head;
         program->head = unit;
         return;
     }
     ExecutableUnit* current = program->head;
-    while (current->next && current->next->firstInstAddr < unit->firstInstAddr) {
+    while (current->next && shouldGoBefore(current->next, unit)) {
         current = current->next;
     }
-    // uit <= next
+    // Next is null
+    // Unit should come after next
     unit->next = current->next;
     current->next = unit;
 }
@@ -131,7 +145,9 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
     int good = true;
 
     while (toBeBlocked) {
+#ifdef DEBUG_PRINT
         printToBlock(toBeBlocked);
+#endif /* ifdef DEBUG_PRINT */
         // Pop!
         ToBeBlocked* evaluating = toBeBlocked;
         toBeBlocked = toBeBlocked->next;
@@ -169,6 +185,10 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
         // Decrease this so instructions < this actually always impact this block
         // We're kinda popping
         newBlock->nextInstAddr = endingInstruction->address;
+
+        ExecutableUnit* nextUnitExists = findUnitAt(out, endingInstruction->address);
+        if (nextUnitExists)
+            goto afterFollowInsn; //hehe
 
         if (endingInstruction->id == X86_INS_RET) {
             good = false;
@@ -227,6 +247,7 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
                 case X86_INS_JNE:
                     compareKind = NOT_EQUAL;
                     break;
+                case X86_INS_JNS:
                 case X86_INS_JG:
                     compareKind = GREATER;
                     break;
@@ -245,10 +266,11 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
             }
 
             if (compareKind) {
+#ifdef DEBUG_PRINT
                 char buff[128] = {0};
-                // printf("Operation!\n");
                 operationToStr(newBlock->lastFlagSet, buff, handle);
                 printf("lastFlagOp: %s\n", buff);
+#endif /* ifdef DEBUG_PRINT */
                 Operation* condition = deepCopyOperation(newBlock->lastFlagSet);
                 condition->kind = compareKind;
                 jumpInsn->info.jumpInsn.condition = condition;
@@ -310,13 +332,20 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
             }
         }
 
+afterFollowInsn:
+
         if(shouldDeleteBlock) {
             deleteCodeBlock(newBlock);
         }
 
+#ifdef DEBUG_PRINT
         printParsedProgram(out);
+#endif
 
     }
+
+    deepPrintParsedProgram(out, handle);
+
 
     return out;
 }
@@ -405,8 +434,10 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
         if (maxAddr && insn->address >= maxAddr)
             break;
 
-        printf("0x%"PRIx64":\t%s\t\t%s\n", insn->address, insn->mnemonic,
-               insn->op_str);
+#ifdef DEBUG_PRINT
+        printf("0x%"PRIx64":\t%s\t\t%s\n", insn->address, insn->mnemonic,insn->op_str);
+#endif /* ifdef DEBUG_PRINT */
+        printf("0x%"PRIx64":\t%s\t\t%s\n", insn->address, insn->mnemonic,insn->op_str);
 
         switch(insn->id) {
             case X86_INS_ADD:
@@ -440,7 +471,7 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
                 printf("Instruction: %s unknown :(\n", insn->mnemonic);
         }
 
-        // printImpacts(block, *csHandle);
+        printImpacts(block, *csHandle);
     } while (good);
 
     block->nextInstAddr = currentAddr;
@@ -460,13 +491,18 @@ void updateImpactsOfMov(CodeBlock* block, cs_insn* insn){
 
     Operation* valueAssigned;
 
+    bool print = false;
+
     if (detail.operands[1].type == X86_OP_REG) {
         // Copy value of register or just run it
         valueAssigned = copyLookupOrCreateRegOp(block, detail.operands[1].reg);
     } else if (detail.operands[1].type == X86_OP_IMM) {
+        print = true;
         valueAssigned = createDataOperation(LITERAL, &detail.operands[1].imm);
     } else if (detail.operands[1].type == X86_OP_MEM) {
         valueAssigned = derefMem(block, detail.operands[1].mem);
+    } else {
+        printf("AAAAA!! Bad type stored in mov");
     }
 
     valueAssigned->width = detail.operands[1].size;
@@ -525,9 +561,9 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     operation->info.binaryOperands.op2 = operands[1];
     operation->width = detail.operands[0].size;
 
-    char test[256] = {0};
-    operationToStr(operation, test, handle);
-    printf("Arithmetic: %s\n", test);
+    // char test[256] = {0};
+    // operationToStr(operation, test, handle);
+    // printf("Arithmetic: %s\n", test);
 
     CodeImpact* impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
     Operation** operationToUpdate = &impactToUpdate->impact;
@@ -566,7 +602,7 @@ void updateImpactsOfLea(CodeBlock* block, cs_insn* insn) {
 }
 
 void updateFlagOp(CodeBlock* block, cs_insn* insn, OperationKind kind) {
-    printf("Updating flag!\n");
+    // printf("Updating flag!\n");
     cs_x86 detail = insn->detail->x86;
     Operation* operation = calloc(sizeof(Operation), 1);
 
@@ -691,7 +727,7 @@ Operation* memoryOp(CodeBlock* block, x86_op_mem mem) {
 Operation* memoryOpPrimitive(x86_op_mem mem) {
     Operation* base = NULL;
     if (mem.base)
-        base = createDataOperation(REGISTER, &mem.index);
+        base = createDataOperation(REGISTER, &mem.base);
 
     if (mem.disp) {
         Operation* new;
@@ -738,6 +774,7 @@ Operation* memoryOpPrimitive(x86_op_mem mem) {
 CodeImpact* findOrCreateImpact(CodeBlock* block, Operation* location) {
     for (int i=0; i<block->impactCount; i++) {
         if (operationsEquivalent(location, block->impacts[i].impactedLocation)) {
+            printf("Found matching!\n");
             return &block->impacts[i];
         }
     }
@@ -795,7 +832,9 @@ Operation* copyLookupOrCreateRegOp(CodeBlock* block, x86_reg reg){
 }
 
 Operation* derefMem(CodeBlock* block, x86_op_mem mem){
-    Operation* locationDereffed = memoryOp(block, mem);
+    Operation* locationDereffed = calloc(sizeof(Operation), 1);
+    locationDereffed->kind = DEREF;
+    locationDereffed->info.unaryOperand = memoryOp(block, mem);
 
     Operation* dereffedValue = findAndCopyImpactOperation(block, locationDereffed);
 
@@ -845,5 +884,17 @@ bool isJumpInsn(x86_insn insn) {
         insn == X86_INS_JG ||
         insn == X86_INS_JL ||
         insn == X86_INS_JLE ||
+        insn == X86_INS_JNS ||
         insn == X86_INS_JGE;
+}
+
+ExecutableUnit* findUnitAt(ParsedProgram* program, Elf64_Addr addr){
+    ExecutableUnit* current = program->head;
+    while(current) {
+        if (current->firstInstAddr == addr) {
+            return current;
+        }
+        current = current->next;
+    }
+    return NULL;
 }
