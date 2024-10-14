@@ -32,7 +32,7 @@ int main(int argc, char** argv) {
 
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 
-    parseAsmFromInstruction(NULL, 0x401156, parsedElf, &handle);
+    parseMainFn(0x401156, parsedElf, &handle);
 
     // count = cs_disasm(handle, parsedElf->textSection, parsedElf->textSectionSize, parsedElf->textSectionVAddr, 0, &insn);
     //

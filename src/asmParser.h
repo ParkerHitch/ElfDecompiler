@@ -15,10 +15,12 @@ typedef struct _AsmParserState {
 
 } AsmParserState;
 
-AsmParserState* initAsmParser();
+ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
+                           ParsedElf* elf,
+                           csh* csHandle);
 
-CodeBlock* parseAsmFromInstruction(AsmParserState* parser,
-                                   Elf64_Addr startInstAddr,
-                                   ParsedElf* elf,
-                                   csh* csHandle);
+CodeBlock* createCodeBlock(Elf64_Addr startAddr,
+                           ParsedElf* elf,
+                           Elf64_Addr maxAddr, // All instructions used must have addresses < this. 0 for no limit
+                           csh* csHandle);
 

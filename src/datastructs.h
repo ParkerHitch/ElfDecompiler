@@ -17,8 +17,13 @@ typedef enum _OperationKind {
     MUL,
     DIV,
 
+    BW_AND,
+    BW_OR,
+    BW_XOR,
+    BW_NOT,
+
     EQUAL,
-    NOTEQAL,
+    NOT_EQUAL,
     GREATER,
     LESS,
     GREATER_OR_EQ,
@@ -123,12 +128,61 @@ typedef struct _CodeBlock {
     CodeImpact* impacts;
     uint impactCapacity;
 
-    // Sections of memory or registers that are dependencies for this block
-    uint dependencyCount;
-    uint dependencyCapacity;
-    ProgramData* dependencies;
+    // Last operation that executed which would have set a flag
+    // Standalone Operation allocated for this.
+    Operation* lastFlagSet;
 
+    // Address of the next instruction to execute.
+    // This is likely a jump or a call. It is not included in the impacts of this block.
+    Elf64_Addr nextInstAddr;
 } CodeBlock;
+
+// ### Completely Parsed Program ###
+
+typedef struct _WriteCall {
+    Elf64_Addr callInsnAddr;
+    Operation* writeTo;
+    Operation* charPtr;
+    Operation* charLen;
+} WriteCall;
+
+typedef enum _ExecutableUnitKind {
+    CODE_BLOCK,
+    WRITE_CALL,
+    JUMP_DEST,
+    JUMP_INSN,
+    RETURN_NOW,
+} ExecutableUnitKind;
+
+typedef struct _JumpInsn {
+    uint destId;
+    Operation* condition;
+} JumpInsn;
+
+typedef struct _ExecutableUnit {
+    ExecutableUnitKind kind;
+    Elf64_Addr firstInstAddr;
+    union {
+        CodeBlock* block;
+        WriteCall writeCall;
+        uint jumpDestId;
+        JumpInsn jumpInsn;
+    } info;
+    struct _ExecutableUnit* next;
+} ExecutableUnit;
+
+
+typedef struct _ParsedProgram {
+    ExecutableUnit* head;
+
+    // 64 jumps ought to be enough
+    // Index of this array = jumpDestId
+    // Value = address of jumpDest destination is at
+    // Useful to tell if at the end of a block we are jumping before or after
+    uint numJumps;
+    Elf64_Addr jumpDestLookup[64];
+} ParsedProgram;
+
 
 // ### Functions ###
 
@@ -150,6 +204,10 @@ void appendBlankInsn(CodeBlock* block, csh* csHandle);
 
 void deleteOperation(Operation* op);
 
+void deleteCodeBlock(CodeBlock* block);
+
+void deleteExecutableUnit(ExecutableUnit* block);
+
 Operation* deepCopyOperation(Operation* op);
 
 Operation* createDataOperation(ProgramDataKind kind, void* data);
@@ -159,3 +217,5 @@ bool operationsEquivalent(Operation* op1, Operation* op2);
 void printImpacts(CodeBlock* block, csh handle);
 
 void operationToStr(Operation* op, char* outBuff, csh handle);
+
+void printParsedProgram(ParsedProgram* program);

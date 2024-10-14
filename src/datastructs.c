@@ -16,10 +16,8 @@ CodeBlock* initCodeBlock(){
     out->impactCapacity = 10;
     out->impacts = malloc(sizeof(CodeImpact) * 10);
 
-
-    out->dependencyCount = 0;
-    out->dependencyCapacity = 10;
-    out->dependencies = malloc(sizeof(ProgramData*) * 10);
+    out->nextInstAddr = 0;
+    out->lastFlagSet = NULL;
 
     return out;
 };
@@ -36,17 +34,23 @@ uint numOperands(OperationKind kind) {
         case FNRETURN:
             return 1;
 
+        case BW_XOR:
+        case BW_OR:
+        case BW_AND:
+        case BW_NOT:
         case ADD:
         case SUB:
         case MUL:
         case DIV:
         case EQUAL:
-        case NOTEQAL:
+        case NOT_EQUAL:
         case GREATER:
         case LESS:
         case GREATER_OR_EQ:
         case LESS_OR_EQ:
             return 2;
+        default:
+            printf("Unkown number: %d\n", kind);
     }
 }
 
@@ -162,6 +166,11 @@ void printImpacts(CodeBlock* block, csh handle) {
 }
 
 void operationToStr(Operation* op, char* outBuff, csh handle){
+    if (op == NULL) {
+        strcat(outBuff, "NULL");
+        return;
+    }
+
     switch (numOperands(op->kind)) {
         case 2: {
             outBuff[0] = '(';
@@ -184,7 +193,7 @@ void operationToStr(Operation* op, char* outBuff, csh handle){
                 case EQUAL:
                     operator = " == ";
                     break;
-                case NOTEQAL:
+                case NOT_EQUAL:
                     operator = " != ";
                     break;
                 case GREATER:
@@ -240,6 +249,46 @@ void operationToStr(Operation* op, char* outBuff, csh handle){
                     break;
             }
             break;
+        default:
+            printf("WTF!!!\n");
     }
 }
 
+void printParsedProgram(ParsedProgram* program){
+    ExecutableUnit* unit = program->head;
+    int count = 100;
+
+    while(unit && count > 0) {
+        printf(" 0x%08lx : ", unit->firstInstAddr);
+        switch(unit->kind) {
+            case CODE_BLOCK:
+                printf("Block\n");
+                break;
+            case WRITE_CALL:
+                printf("Call\n");
+                break;
+            case RETURN_NOW:
+                printf("Return;\n");
+                break;
+            case JUMP_DEST:
+                printf("Dest %d\n", unit->info.jumpDestId);
+                break;
+            case JUMP_INSN:
+                printf("JumpTo: %d\n", unit->info.jumpInsn.destId);
+                break;
+        }
+        unit = unit->next;
+        count --;
+    }
+
+}
+
+void deleteCodeBlock(CodeBlock* block){
+    // NOTE:
+    // Mmmm I love leaking memory 😋
+}
+
+void deleteExecutableUnit(ExecutableUnit* block){
+    // NOTE:
+    // Mmmm I love leaking memory 😋
+}
