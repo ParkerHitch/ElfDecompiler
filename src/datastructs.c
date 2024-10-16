@@ -268,7 +268,16 @@ void deepPrintParsedProgram(ParsedProgram* program, csh handle){
                 printImpacts(unit->info.block, handle);
                 break;
             case WRITE_CALL:
-                printf("Write Call\n");
+                printf("Write(\n");
+                memset(buff, 0, 256);
+                operationToStr(unit->info.writeCall.writeTo, buff, handle);
+                printf("    %s,\n", buff);
+                memset(buff, 0, 256);
+                operationToStr(unit->info.writeCall.charPtr, buff, handle);
+                printf("    %s,\n", buff);
+                memset(buff, 0, 256);
+                operationToStr(unit->info.writeCall.charLen, buff, handle);
+                printf("    %s\n);\n", buff);
                 break;
             case RETURN_NOW:
                 printf("Return\n");
@@ -329,4 +338,76 @@ void deleteCodeBlock(CodeBlock* block){
 void deleteExecutableUnit(ExecutableUnit* block){
     // NOTE:
     // Mmmm I love leaking memory 😋
+}
+
+typedef struct _DepArr{
+    uint cap;
+    uint len;
+    Operation*** arr;
+} DepArr;
+
+void appendToArr(DepArr* arr, Operation** new) {
+    if (arr->len == arr->cap) {
+        arr->cap *= 2;
+        arr->arr = realloc(arr->arr, sizeof(Operation**) * arr->cap);
+    }
+    arr->arr[arr->len++] = new;
+}
+
+void addDepsRecursive(Operation** op, DepArr* arr) {
+    if (op==NULL)
+        return;
+    // I <3 switches :D
+    switch ((*op)->kind) {
+        case DATA:
+            if ((*op)->info.data.kind == REGISTER) {
+                appendToArr(arr, op);
+            }
+            break;
+        case DEREF:
+            appendToArr(arr, op);
+            break;
+        default:
+            switch (numOperands((*op)->kind)) {
+                case 2:
+                    addDepsRecursive(&(*op)->info.binaryOperands.op1, arr);
+                    addDepsRecursive(&(*op)->info.binaryOperands.op2, arr);
+                    break;
+                case 1:
+                    addDepsRecursive(&(*op)->info.unaryOperand, arr);
+                    break;
+            }
+    }
+}
+
+Operation*** locateDependencies(ExecutableUnit* hasDependencies, uint* numDependencies){
+    if (hasDependencies->kind == RETURN_NOW) {
+        *numDependencies = 0;
+        return NULL;
+    } else if (hasDependencies->kind == JUMP_DEST) {
+        printf("Trying to find dependencies of dest. BAD!\n");
+        *numDependencies = 0;
+        return NULL;
+    } else {
+        DepArr arr;
+        arr.len = 0;
+        arr.cap = 10;
+        arr.arr = malloc(sizeof(Operation**) * arr.cap);
+        if (hasDependencies->kind == JUMP_INSN) {
+            if (hasDependencies->info.jumpInsn.condition) {
+                addDepsRecursive(&hasDependencies->info.jumpInsn.condition, &arr);
+            }
+        } else if (hasDependencies->kind == WRITE_CALL) {
+            addDepsRecursive(&hasDependencies->info.writeCall.writeTo, &arr);
+            addDepsRecursive(&hasDependencies->info.writeCall.charPtr, &arr);
+            addDepsRecursive(&hasDependencies->info.writeCall.charLen, &arr);
+        } else if (hasDependencies->kind == CODE_BLOCK) {
+            CodeBlock* block = hasDependencies->info.block;
+            for (int i=0; i<block->impactCount; i++) {
+                addDepsRecursive(&block->impacts[i].impact, &arr);
+            }
+        }
+        *numDependencies = arr.len;
+        return arr.arr;
+    }
 }

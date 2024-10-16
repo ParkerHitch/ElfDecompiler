@@ -19,8 +19,8 @@ EXENAME = decomp
 OUT_DIR = ./out
 SRC_DIR = ./src
 
-SRCS = main.c elfParser.c asmParser.c datastructs.c
-HEADERS = elfParser.h asmParser.h datastructs.h
+SRCS = main.c elfParser.c asmParser.c datastructs.c cfgRecovery.c
+HEADERS = elfParser.h asmParser.h datastructs.h cfgRecovery.h
 OBJS = $(addprefix $(OUT_DIR)/,$(SRCS:%.c=%.o))
 
 # Keep compile-commands.json updated for clangd

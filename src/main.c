@@ -3,8 +3,10 @@
 
 #include <capstone/capstone.h>
 
+#include "datastructs.h"
 #include "elfParser.h"
 #include "asmParser.h"
+#include "cfgRecovery.h"
 
 int main(int argc, char** argv) {
 
@@ -32,7 +34,13 @@ int main(int argc, char** argv) {
 
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 
-    parseMainFn(parsedElf->mainFnStart, parsedElf, &handle);
+    ParsedProgram* program = parseMainFn(parsedElf->mainFnStart, parsedElf, &handle);
+
+    Cfg* cfg = makeCfgAndResolveDependencies(program);
+
+    deepPrintParsedProgram(program, handle);
+
+    printCfg(cfg);
 
     // count = cs_disasm(handle, parsedElf->textSection, parsedElf->textSectionSize, parsedElf->textSectionVAddr, 0, &insn);
     //

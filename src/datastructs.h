@@ -1,3 +1,6 @@
+#ifndef DATASTRUCTS
+#define DATASTRUCTS
+
 #include <capstone/capstone.h>
 #include <capstone/x86.h>
 #include <elf.h>
@@ -40,6 +43,7 @@ typedef enum _OperationKind {
 typedef enum _ProgramDataKind {
     LITERAL,
     REGISTER,
+    // Depricated! I hope I don't use it anywhere!
     ADDRESS, // Into program memory
 } ProgramDataKind;
 
@@ -169,6 +173,9 @@ typedef struct _ExecutableUnit {
         JumpInsn jumpInsn;
     } info;
     struct _ExecutableUnit* next;
+    // DO NOT USE UNTIL AFTER CFG MADE.
+    // Ik it's jank but idc
+    struct _ExecutableUnit* previousCoupled;
 } ExecutableUnit;
 
 
@@ -179,7 +186,7 @@ typedef struct _ParsedProgram {
     // Index of this array = jumpDestId
     // Value = address of jumpDest destination is at
     // Useful to tell if at the end of a block we are jumping before or after
-    uint numJumps;
+    uint numJumpDests;
     Elf64_Addr jumpDestLookup[64];
 } ParsedProgram;
 
@@ -222,3 +229,6 @@ void printParsedProgram(ParsedProgram* program);
 
 void deepPrintParsedProgram(ParsedProgram* program, csh handle);
 
+Operation*** locateDependencies(ExecutableUnit* hasDependencies, uint* numDependencies);
+
+#endif

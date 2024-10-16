@@ -39,16 +39,14 @@ Operation* memoryOp(CodeBlock* block, x86_op_mem mem);
 // Registers don't get expanded
 Operation* memoryOpPrimitive(x86_op_mem mem);
 
-// Finds any impact with that location and returns a copy of the operation stored to that location.
-// NULL if no location found
-Operation* findAndCopyImpactOperation(CodeBlock* block, Operation* location);
-
 // Returns a pointer to an "impact" field of an impact of the given block
 // This impact can either be newly created or already existing and ready to be overwritten
 CodeImpact* getImpactToUpdate(CodeBlock* block, cs_x86_op op);
 
 // Creates DEREF op or retrieves a copy of the value pointed to
 Operation* derefMem(CodeBlock* block, x86_op_mem mem);
+
+Operation* createRegOp(x86_reg reg);
 
 ExecutableUnit* findJumpedInside(ParsedProgram* program, Elf64_Addr addr, bool* shouldAddToToBeBlock, bool* shouldDeleteReturn, ExecutableUnit*** previousNextPtr);
 // NOTE: FOR DEBUG PRINTING ONLY!!
@@ -132,7 +130,7 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
                            csh* csHandle) {
     
     ParsedProgram* out = malloc(sizeof(ParsedProgram));
-    out->numJumps = 0;
+    out->numJumpDests = 0;
     out->head = NULL;
     // ExecutableUnit** tailNullptr = &out->head;
 
@@ -208,9 +206,9 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
             writeCall->kind = WRITE_CALL;
             writeCall->firstInstAddr = endingInstruction->address;
 
-            // writeCall->info.writeCall.charLen = copyLookupOrCreateRegOp(newBlock, X86_REG_RDX);
-            // writeCall->info.writeCall.charPtr = copyLookupOrCreateRegOp(newBlock, X86_REG_RSI);
-            // writeCall->info.writeCall.writeTo = copyLookupOrCreateRegOp(newBlock, X86_REG_RDI);
+            writeCall->info.writeCall.charLen = createRegOp(X86_REG_RDX);
+            writeCall->info.writeCall.charPtr = createRegOp(X86_REG_RSI);
+            writeCall->info.writeCall.writeTo = createRegOp(X86_REG_RDI);
 
             writeCall->next = NULL;
 
@@ -284,8 +282,8 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
 
             Elf64_Addr jumpDest = detail.operands[0].imm;
 
-            uint jumpDestId = out->numJumps;
-            for(int i=0; i<out->numJumps; i++) {
+            uint jumpDestId = out->numJumpDests;
+            for(int i=0; i<out->numJumpDests; i++) {
                 if (out->jumpDestLookup[i] == jumpDest) {
                     jumpDestId = i;
                     break;
@@ -296,14 +294,14 @@ ParsedProgram* parseMainFn(Elf64_Addr mainStartAddr,
             insertUnitIntoProgram(out, jumpInsn);
 
             // If we are adding a new destination
-            if (jumpDestId == out->numJumps){
+            if (jumpDestId == out->numJumpDests){
                 ExecutableUnit* newJumpDest = malloc(sizeof(ExecutableUnit));
                 newJumpDest->kind = JUMP_DEST;
                 newJumpDest->firstInstAddr = jumpDest;
-                newJumpDest->info.jumpDestId = out->numJumps;
+                newJumpDest->info.jumpDestId = out->numJumpDests;
 
                 // Add to the list
-                out->jumpDestLookup[out->numJumps++] = jumpDest;
+                out->jumpDestLookup[out->numJumpDests++] = jumpDest;
 
                 bool shouldAddToToBeBlock;
                 bool shouldDeleteReturn;
@@ -410,7 +408,7 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
     if (segInd == -1)
         return block;
 
-    uint8_t* inCode = &(elf->loadedSegments[segInd][currentAddr - elf->segmentMemLocations[segInd]]);
+    const uint8_t* inCode = &(elf->loadedSegments[segInd][currentAddr - elf->segmentMemLocations[segInd]]);
     size_t len = (elf->segmentMemLens[segInd] - (currentAddr - elf->segmentMemLocations[segInd]));
 
     int good;
@@ -484,6 +482,13 @@ void updateImpactsOfMov(CodeBlock* block, cs_insn* insn){
     if (detail.op_count != 2){
         printf("!Bad operand count for mov\n");
     }
+
+    // Evil hack because we hate the stack
+    if (detail.operands[0].type == X86_OP_REG && detail.operands[0].reg == X86_REG_RBP &&
+        detail.operands[1].type == X86_OP_REG && detail.operands[1].reg == X86_REG_RSP) {
+        return;
+    }
+
 
     CodeImpact* impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
     Operation** operationToUpdate = &impactToUpdate->impact;
@@ -773,7 +778,7 @@ Operation* memoryOpPrimitive(x86_op_mem mem) {
 CodeImpact* findOrCreateImpact(CodeBlock* block, Operation* location) {
     for (int i=0; i<block->impactCount; i++) {
         if (operationsEquivalent(location, block->impacts[i].impactedLocation)) {
-            printf("Found matching!\n");
+            // printf("Found matching!\n");
             return &block->impacts[i];
         }
     }
@@ -894,4 +899,12 @@ ExecutableUnit* findUnitAt(ParsedProgram* program, Elf64_Addr addr){
         current = current->next;
     }
     return NULL;
+}
+
+Operation* createRegOp(x86_reg reg) {
+    Operation* newOp = calloc(1, sizeof(Operation));
+    newOp->kind = DATA;
+    newOp->info.data.kind = REGISTER;
+    newOp->info.data.info.reg = reg;
+    return newOp;
 }
