@@ -437,7 +437,6 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
 #ifdef DEBUG_PRINT
         printf("0x%"PRIx64":\t%s\t\t%s\n", insn->address, insn->mnemonic,insn->op_str);
 #endif /* ifdef DEBUG_PRINT */
-        printf("0x%"PRIx64":\t%s\t\t%s\n", insn->address, insn->mnemonic,insn->op_str);
 
         switch(insn->id) {
             case X86_INS_ADD:
@@ -471,7 +470,7 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
                 printf("Instruction: %s unknown :(\n", insn->mnemonic);
         }
 
-        printImpacts(block, *csHandle);
+        // printImpacts(block, *csHandle);
     } while (good);
 
     block->nextInstAddr = currentAddr;
@@ -841,9 +840,7 @@ Operation* derefMem(CodeBlock* block, x86_op_mem mem){
     if (dereffedValue) {
         deleteOperation(locationDereffed);
     } else {
-        dereffedValue = calloc(sizeof(Operation), 1);
-        dereffedValue->kind = DEREF;
-        dereffedValue->info.unaryOperand = locationDereffed;
+        dereffedValue = locationDereffed;
     }
     
     return dereffedValue;
