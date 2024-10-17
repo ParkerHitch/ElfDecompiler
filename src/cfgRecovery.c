@@ -7,8 +7,8 @@
 
 // NOTE: There is potentially some really nasty bugs if it doesn't end with a return.
 // Oh well.
-Cfg* makeCfgAndResolveDependencies(ParsedProgram* program) {
-    Cfg* out = calloc(1, sizeof(*out));
+StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
+    StructuredCodeTree* out = calloc(1, sizeof(*out));
 
     uint* jumpDestIdToCfgNodeLookup = calloc(program->numJumpDests, sizeof(uint));
 
@@ -26,10 +26,14 @@ Cfg* makeCfgAndResolveDependencies(ParsedProgram* program) {
         
         printf("Creating for addr: %lx\n", current->firstInstAddr);
 
-        CfgNode* cfgNode = &(out->cfgNodes[out->numCfgNodes]);
+        StructuredCfgNode* cfgNode = &(out->cfgNodes[out->numCfgNodes]);
+        cfgNode->kind = BASE;
+        cfgNode->id = out->numCfgNodes + 1;
 
-        cfgNode->startUnit = current;
-        cfgNode->numUnits = 1;
+        BaseCfgNode* baseNode = &cfgNode->info.base;
+
+        baseNode->startUnit = current;
+        baseNode->numUnits = 1;
 
         current->previousCoupled = NULL;
 
@@ -39,23 +43,23 @@ Cfg* makeCfgAndResolveDependencies(ParsedProgram* program) {
             // Could be global but whatever
             current->next->previousCoupled = current;
             current = current->next;
-            cfgNode->numUnits++;
+            baseNode->numUnits++;
         }
         // Can't be first in cfgNode by assertion in if at start of for
         if (current->kind == JUMP_DEST) {
-            cfgNode->numUnits -= 1;
+            baseNode->numUnits -= 1;
             // Need to let the loop naturally advance onto this dest
             current = current->previousCoupled;
             // Just in case
             current->next->previousCoupled = NULL;
         }
 
-        cfgNode->lastUnit = current;
+        baseNode->lastUnit = current;
 
-        printf("Last unit: %lx\n", cfgNode->lastUnit->firstInstAddr);
+        printf("Last unit: %lx\n", baseNode->lastUnit->firstInstAddr);
 
-        ExecutableUnit* needsDepVals = cfgNode->startUnit->next;
-        for (int i=1; i<cfgNode->numUnits; i++) {
+        ExecutableUnit* needsDepVals = baseNode->startUnit->next;
+        for (int i=1; i<baseNode->numUnits; i++) {
 
             // Don't need to worry about case where needs is 1st due to i=1 in for loop.
             uint numDependencies = 0;
@@ -98,29 +102,29 @@ Cfg* makeCfgAndResolveDependencies(ParsedProgram* program) {
     }
 
     for (int i=0; i<out->numCfgNodes; i++) {
-        CfgNode* cfgNode = &out->cfgNodes[i];
-        ExecutableUnit* lastOfCfg = cfgNode->lastUnit;
+        StructuredCfgNode* cfgNode = &out->cfgNodes[i];
+        ExecutableUnit* lastOfCfg = cfgNode->info.base.lastUnit;
 
         switch (lastOfCfg->kind) {
             case CODE_BLOCK:
             case WRITE_CALL:
                 // +2 since id is i+1 since 0 is no jump
-                cfgNode->follow1 = i+2;
-                cfgNode->follow2 = 0;
+                cfgNode->after1 = i+2;
+                cfgNode->after2 = 0;
                 break;
             case RETURN_NOW:
                 // No followers
-                cfgNode->follow1 = 0;
-                cfgNode->follow2 = 0;
+                cfgNode->after1 = 0;
+                cfgNode->after2 = 0;
                 break;
             case JUMP_INSN:
-                cfgNode->follow1 = jumpDestIdToCfgNodeLookup[lastOfCfg->info.jumpInsn.destId];
+                cfgNode->after1 = jumpDestIdToCfgNodeLookup[lastOfCfg->info.jumpInsn.destId];
                 if (lastOfCfg->info.jumpInsn.condition) {
                     // Conditional jump = we could go to next cfgnode
-                    cfgNode->follow2 = i+2;
+                    cfgNode->after2 = i+2;
                 } else {
                     // condition is NULL. No second following node
-                    cfgNode->follow2 = 0;
+                    cfgNode->after2 = 0;
                 }
                 break;
             case JUMP_DEST:
@@ -129,21 +133,69 @@ Cfg* makeCfgAndResolveDependencies(ParsedProgram* program) {
                 return NULL;
         }
 
+        // Add this node as a possible previous node to its successors
+        addPossiblePrevious(out, cfgNode->id, cfgNode->after1);
+        addPossiblePrevious(out, cfgNode->id, cfgNode->after2);
+
     }
 
     return out;
 }
 
-void printCfg(Cfg* cfg) {
-    for (int i=0; i<cfg->numCfgNodes; i++) {
-        CfgNode node = cfg->cfgNodes[i];
-        printf(" [Node : %-2d]\n", i+1);
-        if (node.follow1 && node.follow2) {
+
+
+void printCfg(StructuredCodeTree* tree) {
+    for (int i=0; i<tree->numCfgNodes; i++) {
+        StructuredCfgNode node = tree->cfgNodes[i];
+
+        printf(" |Pre:");
+        for (int j=0; j<tree->numCfgNodes; j++) {
+            if (setContains(&node.possiblePredecessors, tree->cfgNodes[j].id)) {
+                printf(" %d", tree->cfgNodes[j].id);
+            }
+        }
+        printf(" |\n");
+
+        printf(" |Node : %-2d|\n", node.id);
+        printf(" |Kind : %-2d|\n", node.kind);
+        if (node.after1 && node.after2) {
             printf("  /      \\\n");
-            printf(" %02d     %02d\n", node.follow1, node.follow2);
-        } else if (node.follow1) {
+            printf(" %02d      %02d\n", node.after1, node.after2);
+        } else if (node.after1) {
             printf("     |     \n");
-            printf("     %02d\n", node.follow1);
+            printf("     %02d\n", node.after1);
         }
     }
+}
+
+
+// All the helper junk!!!!
+
+
+void addPossiblePrevious(StructuredCodeTree *tree, uint idBefore, uint idAfter) {
+    
+    if (idAfter == 0 || idBefore == 0)
+        return;
+
+    printf("Add %d, %d\n", idBefore, idAfter);
+    setAdd(&tree->cfgNodes[idAfter-1].possiblePredecessors, idBefore);
+
+}
+
+void setAdd(CfgNodeSet* set, uint num){
+    int ind = 0;
+    while (num >= 64) {
+        num /= 64;
+        ind ++;
+    }
+    set->backing[ind] |= 1 << (num);
+}
+
+bool setContains(CfgNodeSet* set, uint num){
+    int ind = 0;
+    while (num >= 64) {
+        num /= 64;
+        ind ++;
+    }
+    return (set->backing[ind] & 1 << (num)) > 0;
 }

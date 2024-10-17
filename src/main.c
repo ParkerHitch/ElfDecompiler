@@ -36,7 +36,7 @@ int main(int argc, char** argv) {
 
     ParsedProgram* program = parseMainFn(parsedElf->mainFnStart, parsedElf, &handle);
 
-    Cfg* cfg = makeCfgAndResolveDependencies(program);
+    StructuredCodeTree* cfg = initBaseAndResolveDependencies(program);
 
     deepPrintParsedProgram(program, handle);
 
