@@ -43,27 +43,27 @@ typedef struct _StructuredCfgNode {
 
         struct {
             uint nodeCount;
-            struct _StructuredCfgNode** nodes;
+            uint* nodes;
         } block;
 
         struct {
-            struct _StructuredCfgNode* before;
-            struct _StructuredCfgNode* body;
+            uint before;
+            uint body;
         } ifThen;
 
         struct {
-            struct _StructuredCfgNode* before;
-            struct _StructuredCfgNode* trueBody;
-            struct _StructuredCfgNode* falseBody;
+            uint before;
+            uint trueBody;
+            uint falseBody;
         } ifThenElse;
 
         struct {
-            struct _StructuredCfgNode* condition;
-            struct _StructuredCfgNode* body;
+            uint condition;
+            uint body;
         } whileLoop;
 
         struct {
-            struct _StructuredCfgNode* body;
+            uint body;
         } doWhileLoop;
     } info;
 
@@ -81,15 +81,24 @@ typedef struct _StructuredCodeTree {
 
 StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program);
 
-void discoverStructure(StructuredCodeTree* tree);
+void rebuildStructure(StructuredCodeTree* tree);
 
 void printCfg(StructuredCodeTree* tree);
 
 void addPossiblePrevious(StructuredCodeTree* tree, uint idBefore, uint idAfter);
 
+void updateAftersOfPredecessors(StructuredCodeTree* tree, CfgNodeSet possiblePredecessors, uint originalId, uint newId);
+
+uint countAfter(StructuredCfgNode* node);
+
 bool setContains(CfgNodeSet* set, uint num);
+bool setsMatch(CfgNodeSet* set1, CfgNodeSet* set2);
+bool setsMatchOrOneIsEmpty(CfgNodeSet* set1, CfgNodeSet* set2);
+uint countMembers(CfgNodeSet set);
 void setAdd(CfgNodeSet* set, uint num);
 void setSub(CfgNodeSet* set, uint num);
 CfgNodeSet setUnion(CfgNodeSet set1, CfgNodeSet set2);
+CfgNodeSet blankSet();
+
 
 #endif

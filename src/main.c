@@ -42,6 +42,10 @@ int main(int argc, char** argv) {
 
     printCfg(cfg);
 
+    rebuildStructure(cfg);
+
+    printCfg(cfg);
+
     // count = cs_disasm(handle, parsedElf->textSection, parsedElf->textSectionSize, parsedElf->textSectionVAddr, 0, &insn);
     //
     // if (count > 0) {
