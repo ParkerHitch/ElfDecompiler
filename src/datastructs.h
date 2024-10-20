@@ -51,7 +51,7 @@ typedef enum _ProgramDataKind {
 typedef struct _ProgramData {
     ProgramDataKind kind;
     union {
-        uint64_t lit;
+        int64_t lit;
         x86_reg reg;
         uint64_t adr; // Into program memory
     } info;
@@ -230,5 +230,7 @@ void printParsedProgram(ParsedProgram* program);
 void deepPrintParsedProgram(ParsedProgram* program, csh handle);
 
 Operation*** locateDependencies(ExecutableUnit* hasDependencies, uint* numDependencies);
+
+uint numOperands(OperationKind kind);
 
 #endif

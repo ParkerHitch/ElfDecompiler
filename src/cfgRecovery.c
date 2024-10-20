@@ -350,12 +350,6 @@ int printRecursive(StructuredCodeTree* tree, uint id, bool visited[], uint depth
         default:
             printf("OTHER\n");
     }
-    // if (node->after1) {
-    //     printRecursive(tree, node->after1, visited, depth);
-    // }
-    // if (node->after2) {
-    //     printRecursive(tree, node->after1, visited, depth);
-    // }
     return 1;
 }
 

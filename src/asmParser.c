@@ -617,7 +617,10 @@ void updateFlagOp(CodeBlock* block, cs_insn* insn, OperationKind kind) {
     for (int i=0; i<2; i++) {
         if (detail.operands[i].type == X86_OP_REG) {
             // Copy value of register or just run it
-            operands[i] = createDataOperation(REGISTER, &detail.operands[i].reg);
+            x86_reg reg = detail.operands[i].reg;
+            if (registerIs32bit(reg))
+                reg = get64bitParent(reg);
+            operands[i] = createDataOperation(REGISTER, &reg);
         } else if (detail.operands[i].type == X86_OP_IMM) {
             operands[i] = createDataOperation(LITERAL, &detail.operands[i].imm);
         } else if (detail.operands[i].type == X86_OP_MEM) {

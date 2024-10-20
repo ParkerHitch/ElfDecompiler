@@ -7,6 +7,7 @@
 #include "elfParser.h"
 #include "asmParser.h"
 #include "cfgRecovery.h"
+#include "cGen.h"
 
 int main(int argc, char** argv) {
 
@@ -40,11 +41,12 @@ int main(int argc, char** argv) {
 
     deepPrintParsedProgram(program, handle);
 
-    printCfg(cfg);
+    // printCfg(cfg);
 
     rebuildStructure(cfg);
 
-    printCfg(cfg);
+    writeC(stdout, cfg);
+    // printCfg(cfg);
 
     // count = cs_disasm(handle, parsedElf->textSection, parsedElf->textSectionSize, parsedElf->textSectionVAddr, 0, &insn);
     //
