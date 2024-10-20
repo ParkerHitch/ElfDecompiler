@@ -45,7 +45,7 @@ int main(int argc, char** argv) {
 
     rebuildStructure(cfg);
 
-    writeC(stdout, cfg);
+    writeC(stdout, cfg, parsedElf);
     // printCfg(cfg);
 
     // count = cs_disasm(handle, parsedElf->textSection, parsedElf->textSectionSize, parsedElf->textSectionVAddr, 0, &insn);

@@ -79,6 +79,9 @@ Operation* createDataOperation(ProgramDataKind kind, void* data){
         case REGISTER:
             newOp->info.data.info.reg = * ((typeof(newOp->info.data.info.reg)*) data );
             break;
+        case ADDRESS:
+            newOp->info.data.info.adr = * ((typeof(newOp->info.data.info.adr)*) data );
+            break;
     }
     return newOp;
 }

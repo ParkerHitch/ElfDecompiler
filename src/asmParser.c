@@ -1,6 +1,7 @@
 #include "asmParser.h"
 #include "capstone/capstone.h"
 #include "capstone/x86.h"
+#include "datastructs.h"
 #include <elf.h>
 #include <stdlib.h>
 #include <string.h>
@@ -692,12 +693,21 @@ Operation* memoryOp(CodeBlock* block, x86_op_mem mem) {
     if (mem.disp) {
         Operation* new;
         if (base) {
-            new = calloc(1, sizeof(Operation));
-            new->kind = ADD;
-            new->info.binaryOperands.op1 = base;
-            new->info.binaryOperands.op2 = createDataOperation(LITERAL, &mem.disp);
+            if (mem.base == X86_REG_RIP) {
+                cs_insn* insn = block->instructions[block->impactCount-1];
+                Elf64_Addr ripVal = insn->address + insn->size;
+                Elf64_Addr addr = ripVal += mem.disp;
+                new = createDataOperation(ADDRESS, &addr);
+                deleteOperation(base);
+            } else {
+                new = calloc(1, sizeof(Operation));
+                new->kind = ADD;
+                new->info.binaryOperands.op1 = base;
+                new->info.binaryOperands.op2 = createDataOperation(LITERAL, &mem.disp);
+            }
         } else {
             new = createDataOperation(LITERAL, &mem.disp);
+            deleteOperation(base);
         }
         base = new;
     }

@@ -1,40 +1,42 @@
 #include "cGen.h"
+#include "asmParser.h"
 #include "cfgRecovery.h"
 #include "datastructs.h"
 #include <stdio.h>
 
-void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id);
+void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, ParsedElf* elf);
 void writeLine(FILE* out, CodeImpact* impact, uint depth);
-void operationToCExpression(char* out, Operation* op);
+void operationToCExpression(char* out, Operation* op, ParsedElf* elf);
 bool isLocalVaiableAddr(Operation* op);
 void localVaiableAddrToName(char* out, Operation* op);
 void writeIndent(FILE* out, uint depth);
-void writeImpacts(FILE* out, CodeBlock* block, uint depth);
+void writeImpacts(FILE* out, CodeBlock* block, uint depth, ParsedElf* elf);
 Operation* getCondition(StructuredCodeTree* tree, uint node);
+void logicalInvert(Operation* op);
 
-void writeC(FILE* outFile, StructuredCodeTree* tree){
+void writeC(FILE* outFile, StructuredCodeTree* tree, ParsedElf* elf){
 
     // Boilerplate
     fprintf(outFile, "#include <unistd.h>\n\nint main(int argc, char** argv) {\n");
 
-    writeRecursive(outFile, tree, 1, tree->rootNode);
+    writeRecursive(outFile, tree, 1, tree->rootNode, elf);
 
     fprintf(outFile, "}\n");
 }
 
-void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id){
+void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, ParsedElf* elf){
     StructuredCfgNode* node = &tree->cfgNodes[id-1];
     switch (node->kind) {
         case BASE:{
             ExecutableUnit* unit = node->info.base.startUnit;
             for (int i=0; i<node->info.base.numUnits; (i++, unit=unit->next)) {
                 if (unit->kind == CODE_BLOCK) {
-                    writeImpacts(out, unit->info.block, depth);
+                    writeImpacts(out, unit->info.block, depth, elf);
                 } else if (unit->kind == WRITE_CALL) {
                     char params[3][64] = {{0}, {0}, {0}};
-                    operationToCExpression(params[0], unit->info.writeCall.writeTo);
-                    operationToCExpression(params[1], unit->info.writeCall.charPtr);
-                    operationToCExpression(params[2], unit->info.writeCall.charLen);
+                    operationToCExpression(params[0], unit->info.writeCall.writeTo, elf);
+                    operationToCExpression(params[1], unit->info.writeCall.charPtr, elf);
+                    operationToCExpression(params[2], unit->info.writeCall.charLen, elf);
                     writeIndent(out, depth);
                     fprintf(out, "write(%s, %s, %s);\n", params[0], params[1], params[2]);
                 } else if (unit->kind == RETURN_NOW) {
@@ -46,35 +48,36 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id){
             break;
         case BLOCK:
             for (int i=0; i<node->info.block.nodeCount; i++) {
-                writeRecursive(out, tree, depth, node->info.block.nodes[i]);
+                writeRecursive(out, tree, depth, node->info.block.nodes[i], elf);
             }
             break;
         case IF_THEN: {
-            writeRecursive(out, tree, depth, node->info.ifThen.before);
+            writeRecursive(out, tree, depth, node->info.ifThen.before, elf);
             Operation* cond = getCondition(tree, node->info.ifThen.before);
+            logicalInvert(cond);
             char condStr[64];
-            operationToCExpression(condStr, cond);
+            operationToCExpression(condStr, cond, elf);
             writeIndent(out, depth);
             fprintf(out, "if (%s) {\n", condStr);
-            writeRecursive(out, tree, depth+1, node->info.ifThen.body);
+            writeRecursive(out, tree, depth+1, node->info.ifThen.body, elf);
             writeIndent(out, depth);
             fprintf(out, "}\n");
         }
             break;
         case IF_THEN_ELSE: {
-            writeRecursive(out, tree, depth, node->info.ifThenElse.before);
+            writeRecursive(out, tree, depth, node->info.ifThenElse.before, elf);
             Operation* cond = getCondition(tree, node->info.ifThenElse.before);
             char condStr[64] = {0};
-            operationToCExpression(condStr, cond);
+            operationToCExpression(condStr, cond, elf);
             writeIndent(out, depth);
             fprintf(out, "if (%s) {\n", condStr);
 
-            writeRecursive(out, tree, depth+1, node->info.ifThenElse.trueBody);
+            writeRecursive(out, tree, depth+1, node->info.ifThenElse.trueBody, elf);
 
             writeIndent(out, depth);
             fprintf(out, "} else {\n");
 
-            writeRecursive(out, tree, depth+1, node->info.ifThenElse.falseBody);
+            writeRecursive(out, tree, depth+1, node->info.ifThenElse.falseBody, elf);
 
             writeIndent(out, depth);
             fprintf(out, "}\n");
@@ -100,7 +103,7 @@ Operation* getCondition(StructuredCodeTree* tree, uint nodeId){
     return NULL;
 }
 
-void writeImpacts(FILE* out, CodeBlock* block, uint depth) {
+void writeImpacts(FILE* out, CodeBlock* block, uint depth, ParsedElf* elf) {
     for (int i=0; i<block->impactCount; i++) {
         CodeImpact* impact = &block->impacts[i];
         if (impact->impactedLocation->kind == DEREF &&
@@ -108,7 +111,7 @@ void writeImpacts(FILE* out, CodeBlock* block, uint depth) {
             char varname[32] = {0};
             char result[128] = {0};
             localVaiableAddrToName(varname, impact->impactedLocation->info.unaryOperand);
-            operationToCExpression(result, impact->impact);
+            operationToCExpression(result, impact->impact, elf);
             writeIndent(out, depth);
             fprintf(out, "%s = %s;\n", varname, result);
         }
@@ -116,15 +119,22 @@ void writeImpacts(FILE* out, CodeBlock* block, uint depth) {
 }
 
 
-void operationToCExpression(char* out, Operation* op){
+void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
     if (op == NULL) {
         return;
     }
 
     switch (numOperands(op->kind)) {
         case 2: {
+
+            if (isLocalVaiableAddr(op)){
+                out[0] = '&';
+                localVaiableAddrToName(&(out[1]), op);
+                return;
+            }
+
             out[0] = '(';
-            operationToCExpression(&(out[1]), op->info.binaryOperands.op1);
+            operationToCExpression(&(out[1]), op->info.binaryOperands.op1, elf);
 
             char* operator;
             switch(op->kind) {
@@ -166,7 +176,7 @@ void operationToCExpression(char* out, Operation* op){
 
             int newStart = strlen(out);
 
-            operationToCExpression(&out[newStart], op->info.binaryOperands.op2);
+            operationToCExpression(&out[newStart], op->info.binaryOperands.op2, elf);
             strcat(out, ")");
         }
             break;
@@ -176,7 +186,7 @@ void operationToCExpression(char* out, Operation* op){
                     localVaiableAddrToName(out, op->info.unaryOperand);
                 } else {
                     out[1] = '*';
-                    operationToCExpression(&(out[2]), op->info.unaryOperand);
+                    operationToCExpression(&(out[2]), op->info.unaryOperand, elf);
                 }
             } else {
                 printf("Printing invalid unaryop: %d\n", op->kind);
@@ -192,13 +202,58 @@ void operationToCExpression(char* out, Operation* op){
                     sprintf(out, "register:%d!", op->info.data.info.reg);
                     // sprintf(out, "%s", cs_reg_name(handle, op->info.data.info.reg));
                     break;
-                case ADDRESS:
-                    sprintf(out, "A0x%x", op->info.data.info.reg);
+                case ADDRESS: {
+                    uint8_t* val = readVAddr(elf, op->info.data.info.adr);
+                    if (val) {
+                        out[0] = '"';
+                        int i = 0;
+                        int j = 1;
+                        char c = val[0];
+                        while (c) {
+                            if (32 <= c && c <= 126) {
+                                out[j++] = c;
+                            } else {
+                                sprintf(&(out[j]), "\\0x%02x", c);
+                                j += 5;
+                            }
+                            i++;
+                            c = val[i];
+                        }
+                        out[j] = '"';
+                    } else {
+                        sprintf(out, "0x%lx", op->info.data.info.adr);
+                    }
+                }
                     break;
             }
             break;
         default:
             printf("WTF!!!\n");
+    }
+}
+
+void logicalInvert(Operation* op){
+    switch(op->kind) {
+        case EQUAL:
+            op->kind = NOT_EQUAL;
+            break;
+        case NOT_EQUAL:
+            op->kind = EQUAL;
+            break;
+        case GREATER:
+            op->kind = LESS_OR_EQ;
+            break;
+        case LESS_OR_EQ:
+            op->kind = GREATER;
+            break;
+        case GREATER_OR_EQ:
+            op->kind = LESS;
+            break;
+        case LESS:
+            op->kind = GREATER_OR_EQ;
+            break;
+        default:
+            printf("Invalid logic\n");
     }
 }
 

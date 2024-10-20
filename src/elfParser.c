@@ -126,24 +126,26 @@ ParsedElf* readElf(char fname[]) {
     out->segmentMemLocations = malloc(sizeof(Elf64_Addr) * loadCount);
     out->segmentMemLens      = malloc(sizeof(Elf64_Addr) * loadCount);
     out->loadedSegments      = malloc(sizeof(uint8_t*  ) * loadCount);
+    int j = 0;
     for (int i=0; i<out->programHeaderCount; i++) {
         Elf64_Phdr phdr = out->programHeaders[i];
         if (phdr.p_type != PT_LOAD)
             continue;
-        out->segmentMemLocations[i] = phdr.p_vaddr;
-        out->segmentMemLens[i] = phdr.p_memsz;
+        out->segmentMemLocations[j] = phdr.p_vaddr;
+        out->segmentMemLens[j] = phdr.p_memsz;
 
-        out->loadedSegments[i] = calloc(sizeof(uint8_t), phdr.p_memsz);
+        out->loadedSegments[j] = calloc(sizeof(uint8_t), phdr.p_memsz);
 
-        printf("Segment no: %d, Addr: 0x%08x, MemLen: %d, FileSize: %d\n", i, phdr.p_vaddr, phdr.p_memsz, phdr.p_filesz);
+        printf("Segment no: %d, Addr: 0x%08lx, MemLen: %lu, FileSize: %lu\n", j, phdr.p_vaddr, phdr.p_memsz, phdr.p_filesz);
 
         fseek(elff, phdr.p_offset, SEEK_SET);
-        result = fread(out->loadedSegments[i], phdr.p_filesz, 1, elff);
+        result = fread(out->loadedSegments[j], phdr.p_filesz, 1, elff);
 
         if (result != 1) {
             printf("Failed to load segment into memory. Code: %d\n", result);
             // TODO: Better error handling. Return. Same above.
         }
+        j++;
     }
 
     return out;
