@@ -530,7 +530,7 @@ void updateImpactsOfMov(CodeBlock* block, cs_insn* insn){
 
 void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     cs_x86 detail = insn->detail->x86;
-    if (detail.op_count != 2 && insn->id != X86_INS_IDIV){
+    if (detail.op_count != 2 && insn->id != X86_INS_IDIV && insn->id != X86_INS_IMUL){
         printf("!Bad operand count for arithmetic\n");
     }
 
@@ -565,8 +565,39 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     }
 
     Operation* operands[2];
+    CodeImpact* impactToUpdate;
 
-    if (insn->id != X86_INS_IDIV) {
+    if (detail.op_count == 1) {
+        operands[0] = copyLookupOrCreateRegOp(block, X86_REG_RAX);
+        if (detail.operands[0].type == X86_OP_REG) {
+            // Copy value of register or just run it
+            operands[1] = copyLookupOrCreateRegOp(block, detail.operands[0].reg);
+        } else if (detail.operands[0].type == X86_OP_IMM) {
+            operands[1] = createDataOperation(LITERAL, &detail.operands[0].imm);
+        } else if (detail.operands[0].type == X86_OP_MEM) {
+            operands[1] = derefMem(block, detail.operands[0].mem);
+        } else {
+            printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
+        }
+        x86_reg r = X86_REG_RAX;
+        Operation* destLoc = createDataOperation(REGISTER, &r);
+        impactToUpdate = findOrCreateImpact(block, destLoc);
+        deleteOperation(destLoc);
+    } else if (detail.op_count == 3) {
+        for (int i=1; i<3; i++) {
+            if (detail.operands[i].type == X86_OP_REG) {
+                // Copy value of register or just run it
+                operands[i-1] = copyLookupOrCreateRegOp(block, detail.operands[i].reg);
+            } else if (detail.operands[i].type == X86_OP_IMM) {
+                operands[i-1] = createDataOperation(LITERAL, &detail.operands[i].imm);
+            } else if (detail.operands[i].type == X86_OP_MEM) {
+                operands[i-1] = derefMem(block, detail.operands[i].mem);
+            } else {
+                printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
+            }
+        }
+        impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
+    } else {
         for (int i=0; i<2; i++) {
             if (detail.operands[i].type == X86_OP_REG) {
                 // Copy value of register or just run it
@@ -579,18 +610,7 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
                 printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
             }
         }
-    } else {
-        operands[0] = copyLookupOrCreateRegOp(block, X86_REG_RAX);
-        if (detail.operands[0].type == X86_OP_REG) {
-            // Copy value of register or just run it
-            operands[1] = copyLookupOrCreateRegOp(block, detail.operands[0].reg);
-        } else if (detail.operands[0].type == X86_OP_IMM) {
-            operands[1] = createDataOperation(LITERAL, &detail.operands[0].imm);
-        } else if (detail.operands[0].type == X86_OP_MEM) {
-            operands[1] = derefMem(block, detail.operands[0].mem);
-        } else {
-            printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
-        }
+        impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
     }
 
 
@@ -602,7 +622,6 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     // operationToStr(operation, test, handle);
     // printf("Arithmetic: %s\n", test);
 
-    CodeImpact* impactToUpdate = getImpactToUpdate(block, detail.operands[0]);
     Operation** operationToUpdate = &impactToUpdate->impact;
 
     if (*operationToUpdate) {

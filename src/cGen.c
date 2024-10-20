@@ -4,7 +4,7 @@
 #include "datastructs.h"
 #include <stdio.h>
 
-#define EXPR_LEN 256
+#define EXPR_LEN 512
 #define VAR_LEN 64
 
 void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, ParsedElf* elf);

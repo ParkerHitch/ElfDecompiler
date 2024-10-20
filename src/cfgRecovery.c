@@ -211,7 +211,7 @@ void rebuildStructure(StructuredCodeTree* tree) {
         newNode->id = tree->numCfgNodes + 1;
         newNode->kind = BASE;
 
-        printNode(tree, checking);
+        // printNode(tree, checking);
 
         // BLOCK
         if (after1 &&
@@ -242,7 +242,7 @@ void rebuildStructure(StructuredCodeTree* tree) {
                 if (checkingId == tree->rootNode)
                     tree->rootNode =  after1->id;
 
-                printf("After %d is %d & %d", after1->id, after1->after1, after1->after2);
+                // printf("After %d is %d & %d", after1->id, after1->after1, after1->after2);
 
             } else {
                 printf(", NewID: %d\n", newNode->id);
@@ -391,7 +391,6 @@ void rebuildStructure(StructuredCodeTree* tree) {
                 tree->rootNode = newNode->id;
             postorder[ind] = newNode->id;
         } else {
-            printf("inc");
             ind++;
         }
     }

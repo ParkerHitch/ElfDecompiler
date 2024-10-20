@@ -52,7 +52,7 @@ uint numOperands(OperationKind kind) {
         case RSHIFT:
             return 2;
         default:
-            printf("Unkown number: %d\n", kind);
+            printf("Unknown number: %d\n", kind);
     }
 }
 
