@@ -82,6 +82,9 @@ Operation* createDataOperation(ProgramDataKind kind, void* data){
         case ADDRESS:
             newOp->info.data.info.adr = * ((typeof(newOp->info.data.info.adr)*) data );
             break;
+        case PARAM:
+            newOp->info.data.info.paramInd = * ((typeof(newOp->info.data.info.paramInd)*) data );
+            break;
     }
     return newOp;
 }

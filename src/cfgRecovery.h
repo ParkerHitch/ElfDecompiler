@@ -69,6 +69,13 @@ typedef struct _StructuredCfgNode {
 
 } StructuredCfgNode;
 
+typedef struct _Variable {
+    int64_t offset;
+    char* specialName;
+    uint8_t width;
+    bool isArray;
+} Variable;
+
 // Closest thing to an AST we're gonna get
 typedef struct _StructuredCodeTree {
     ParsedProgram* baseProgram;
@@ -77,9 +84,14 @@ typedef struct _StructuredCodeTree {
     StructuredCfgNode cfgNodes[MAX_CFG_NODES_DIV_64 * 64];
 
     uint rootNode;
+
+    uint varcount;
+    Variable* vars;
 } StructuredCodeTree;
 
 StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program);
+
+void populateVariableTable(StructuredCodeTree* tree);
 
 void rebuildStructure(StructuredCodeTree* tree);
 

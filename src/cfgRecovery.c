@@ -1,6 +1,7 @@
 #include "cfgRecovery.h"
 
 #include "asmParser.h"
+#include "capstone/x86.h"
 #include "datastructs.h"
 #include <stdint.h>
 #include <stdio.h>
@@ -61,8 +62,8 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
 
         printf("Last unit: %lx\n", baseNode->lastUnit->firstInstAddr);
 
-        ExecutableUnit* needsDepVals = baseNode->startUnit->next;
-        for (int i=1; i<baseNode->numUnits; i++) {
+        ExecutableUnit* needsDepVals = out->numCfgNodes == 0 ? baseNode->startUnit : baseNode->startUnit->next;
+        for (int i=out->numCfgNodes == 0 ? 0 : 1; i<baseNode->numUnits; i++) {
 
             // Don't need to worry about case where needs is 1st due to i=1 in for loop.
             uint numDependencies = 0;
@@ -87,6 +88,7 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
                     Operation* valueProvided = findAndCopyImpactOperation(provider, *toBeReplaced);
 
                     if (valueProvided) {
+                        printf("Found!");
                         deleteOperation(*toBeReplaced);
                         *toBeReplaced = valueProvided;
                         // Don't wanna replace with older info
@@ -94,6 +96,41 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
                     }
                 }
             }
+
+            // Function params
+            if (out->numCfgNodes == 0) {
+                printf("Checking for params\n");
+                // resolve param deps
+                for (int j=0; j<numDependencies; j++) {
+                    Operation** toBeReplaced = dependencies[j];
+                    // Don't wanna replace with older info
+                    if (!toBeReplaced)
+                        continue;
+
+                    Operation* valueProvided = NULL;
+                    if ((*toBeReplaced)->kind == DATA &&
+                        (*toBeReplaced)->info.data.kind == REGISTER) {
+
+                        if ((*toBeReplaced)->info.data.info.reg == X86_REG_RDI) {
+                            // Argc
+                            uint8_t param = 0;
+                            valueProvided = createDataOperation(PARAM, &param);
+                        } else if ((*toBeReplaced)->info.data.info.reg == X86_REG_RSI) {
+                            // Argv
+                            uint8_t param = 1;
+                            valueProvided = createDataOperation(PARAM, &param);
+                        }
+                    }
+
+                    if (valueProvided) {
+                        deleteOperation(*toBeReplaced);
+                        *toBeReplaced = valueProvided;
+                        // Don't wanna replace with older info
+                        dependencies[j] = NULL;
+                    }
+                }
+            }
+
             free(dependencies);
 
             needsDepVals = needsDepVals->next;

@@ -43,8 +43,8 @@ typedef enum _OperationKind {
 typedef enum _ProgramDataKind {
     LITERAL,
     REGISTER,
-    // Depricated! I hope I don't use it anywhere!
     ADDRESS, // Into program memory
+    PARAM,
 } ProgramDataKind;
 
 // Tagged union representing data that can be loaded/modified during ops
@@ -54,6 +54,7 @@ typedef struct _ProgramData {
         int64_t lit;
         x86_reg reg;
         uint64_t adr; // Into program memory
+        uint8_t paramInd;
     } info;
 } ProgramData;
 
@@ -97,22 +98,6 @@ typedef struct _CodeImpact {
 
 // ### Code blocks ###
 
-// After a code block executes, what happens?
-typedef enum _AfterActionKind {
-    RETURN,
-    JUMP,
-    CONDITIONAL_JUMP,
-} AfterActionKind;
-
-typedef struct _AfterAction {
-    AfterActionKind kind;
-    // If we're jumping, even conditionally, where would we go?
-    uint64_t jumpAddr;
-    // If we're jumpting conditionally, what's the condition?
-    // This must be a comparason operation, obviously
-    Operation* condition;
-} AfterAction;
-
 // Represents a bit of code that always gets executed together
 typedef struct _CodeBlock {
 
@@ -123,9 +108,6 @@ typedef struct _CodeBlock {
     uint instructionCount;
     uint instructionCapacity;
     cs_insn** instructions;
-
-    // What happens after this block executes?
-    AfterAction after;
 
     // Arry of observable effects of this block executing.
     uint impactCount;

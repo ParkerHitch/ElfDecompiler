@@ -212,6 +212,9 @@ void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
                         while (c) {
                             if (32 <= c && c <= 126) {
                                 out[j++] = c;
+                            } else if (c=='\n') {
+                                out[j++] = '\\';
+                                out[j++] = 'n';
                             } else {
                                 sprintf(&(out[j]), "\\0x%02x", c);
                                 j += 5;
@@ -224,6 +227,13 @@ void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
                         sprintf(out, "0x%lx", op->info.data.info.adr);
                     }
                 }
+                    break;
+                case PARAM:
+                    if (op->info.data.info.paramInd == 0) {
+                        sprintf(out, "argc");
+                    } else {
+                        sprintf(out, "argv");
+                    }
                     break;
             }
             break;
