@@ -62,6 +62,7 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
 
         printf("Last unit: %lx\n", baseNode->lastUnit->firstInstAddr);
 
+        // Idk dude if I set this always to start/0 I get an error so we ball I guess
         ExecutableUnit* needsDepVals = out->numCfgNodes == 0 ? baseNode->startUnit : baseNode->startUnit->next;
         for (int i=out->numCfgNodes == 0 ? 0 : 1; i<baseNode->numUnits; i++) {
 
@@ -245,10 +246,32 @@ void rebuildStructure(StructuredCodeTree* tree) {
 
                 updateAftersOfPredecessors(tree, checking.possiblePredecessors, checking.id, newNode->id);
             }
+        // INFINITE_LOOP && DO_WHILE
+        } else if (after1 &&
+            after1->id == checkingId) {
+            if (!after2) {
+                // INFINITE_LOOP
+                printf("Found infiniteLoop with %d, NewID: %d\n", checkingId, newNode->id);
+                newNode->kind = INFINITE_LOOP;
+                newNode->info.infiniteLoop.body = checkingId;
+            } else {
+                // DO_WHILE
+                printf("Found doWhile with %d, NewID: %d\n", checkingId, newNode->id);
+                newNode->kind = DO_WHILE_LOOP;
+                newNode->info.doWhileLoop.body = checkingId;
+            }
+
+            newNode->possiblePredecessors = checking.possiblePredecessors;
+            setSub(&newNode->possiblePredecessors, checkingId);
+            newNode->after1 = checking.after2;
+            newNode->after2 = 0;
+            updateAftersOfPredecessors(tree, newNode->possiblePredecessors, checking.id, newNode->id);
 
         } else if (after1 && after2) {
             // IF THEN ELSE
-            if (countMembers(after1->possiblePredecessors) == 1 &&
+            if (!setContains(&checking.possiblePredecessors, after1->id) &&
+                !setContains(&checking.possiblePredecessors, after2->id) &&
+                countMembers(after1->possiblePredecessors) == 1 &&
                 countMembers(after2->possiblePredecessors) == 1 &&
                 countAfter(after1) < 2 &&
                 countAfter(after2) < 2 &&
@@ -281,18 +304,18 @@ void rebuildStructure(StructuredCodeTree* tree) {
             // IF THEN
             // after1 = after the statemtn
             // after2 = statement body
-            } else if (
-                countMembers(after2->possiblePredecessors) == 1 &&
-                // 2 cases. Body has infinite loop/return or doesnt
-                // No return/loop
-                ((countAfter(after2)==1 &&
-                      after2->after1 == after1->id &&
-                      countMembers(after1->possiblePredecessors) == 2)
-                 ||
-                // return/loop
-                 (countAfter(after2)==0 &&
-                      countMembers(after1->possiblePredecessors) == 1))
-            ) {
+            } else if ( !setContains(&checking.possiblePredecessors, after1->id) &&
+                        !setContains(&checking.possiblePredecessors, after2->id) &&
+                        countMembers(after2->possiblePredecessors) == 1 &&
+                        // 2 cases. Body has infinite loop/return or doesnt
+                        // No return/loop
+                        ((countAfter(after2)==1 &&
+                              after2->after1 == after1->id &&
+                              countMembers(after1->possiblePredecessors) == 2)
+                         ||
+                        // return/loop
+                         (countAfter(after2)==0 &&
+                              countMembers(after1->possiblePredecessors) == 1))) {
                 // IF THEN
                 printf("Found ifThen with %d & %d. NewID: %d\n", checkingId, after2->id, newNode->id);
 
@@ -306,6 +329,26 @@ void rebuildStructure(StructuredCodeTree* tree) {
 
                 after1->possiblePredecessors = blankSet();
                 setAdd(&after1->possiblePredecessors, newNode->id);
+
+                updateAftersOfPredecessors(tree, checking.possiblePredecessors, checking.id, newNode->id);
+            // WHILE_LOOP
+            } else if (countAfter(after1) <= 2 &&
+                       setContains(&checking.possiblePredecessors, after1->id)) {
+                // WHILE_LOOP
+                printf("Found whileLoop with %d & %d, NewID: %d\n", checkingId, after1->id, newNode->id);
+                newNode->kind = WHILE_LOOP;
+
+                newNode->possiblePredecessors = checking.possiblePredecessors;
+                setSub(&newNode->possiblePredecessors, after1->id);
+
+                newNode->info.whileLoop.condition = checkingId;
+                newNode->info.whileLoop.body = after1->id;
+
+                newNode->after1 = checking.after2;
+                newNode->after2 = 0;
+
+                after2->possiblePredecessors = blankSet();
+                setAdd(&after2->possiblePredecessors, newNode->id);
 
                 updateAftersOfPredecessors(tree, checking.possiblePredecessors, checking.id, newNode->id);
             }
@@ -392,28 +435,28 @@ int printRecursive(StructuredCodeTree* tree, uint id, bool visited[], uint depth
 
 void printCfg(StructuredCodeTree* tree) {
     bool visited[MAX_CFG_NODES_DIV_64 * 64] = {0};
-    printRecursive(tree, tree->rootNode, visited, 0);
-    // for (int i=0; i<tree->numCfgNodes; i++) {
-    //     StructuredCfgNode node = tree->cfgNodes[i];
-    //
-    //     printf(" |Pre:");
-    //     for (int j=0; j<tree->numCfgNodes; j++) {
-    //         if (setContains(&node.possiblePredecessors, tree->cfgNodes[j].id)) {
-    //             printf(" %d", tree->cfgNodes[j].id);
-    //         }
-    //     }
-    //     printf(" |\n");
-    //
-    //     printf(" |Node : %-2d|\n", node.id);
-    //     printf(" |Kind : %-2d|\n", node.kind);
-    //     if (node.after1 && node.after2) {
-    //         printf("  /      \\\n");
-    //         printf(" %02d      %02d\n", node.after1, node.after2);
-    //     } else if (node.after1) {
-    //         printf("     |     \n");
-    //         printf("     %02d\n", node.after1);
-    //     }
-    // }
+    // printRecursive(tree, tree->rootNode, visited, 0);
+    for (int i=0; i<tree->numCfgNodes; i++) {
+        StructuredCfgNode node = tree->cfgNodes[i];
+
+        printf(" |Pre:");
+        for (int j=0; j<tree->numCfgNodes; j++) {
+            if (setContains(&node.possiblePredecessors, tree->cfgNodes[j].id)) {
+                printf(" %d", tree->cfgNodes[j].id);
+            }
+        }
+        printf(" |\n");
+
+        printf(" |Node : %-2d|\n", node.id);
+        printf(" |Kind : %-2d|\n", node.kind);
+        if (node.after1 && node.after2) {
+            printf("  /      \\\n");
+            printf(" %02d      %02d\n", node.after1, node.after2);
+        } else if (node.after1) {
+            printf("     |     \n");
+            printf("     %02d\n", node.after1);
+        }
+    }
 }
 
 
@@ -441,6 +484,17 @@ void setAdd(CfgNodeSet* set, uint num){
         ind ++;
     }
     set->backing[ind] |= 1 << (num);
+}
+
+void setSub(CfgNodeSet* set, uint num){
+    int ind = 0;
+    while (num >= 64) {
+        num /= 64;
+        ind ++;
+    }
+    uint64_t mask = 1 << (num);
+    mask = ~mask;
+    set->backing[ind] &= mask;
 }
 
 bool setContains(CfgNodeSet* set, uint num){

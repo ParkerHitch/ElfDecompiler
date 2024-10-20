@@ -41,9 +41,11 @@ int main(int argc, char** argv) {
 
     deepPrintParsedProgram(program, handle);
 
-    // printCfg(cfg);
+    printCfg(cfg);
 
     rebuildStructure(cfg);
+
+    printCfg(cfg);
 
     writeC(stdout, cfg, parsedElf);
     // printCfg(cfg);

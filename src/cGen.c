@@ -83,6 +83,46 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
             fprintf(out, "}\n");
         }
             break;
+        case INFINITE_LOOP: {
+            writeIndent(out, depth);
+            fprintf(out, "while (true) {\n");
+
+            writeRecursive(out, tree, depth+1, node->info.infiniteLoop.body, elf);
+
+            writeIndent(out, depth);
+            fprintf(out, "}\n");
+        }
+            break;
+        case DO_WHILE_LOOP: {
+
+            Operation* cond = getCondition(tree, node->info.doWhileLoop.body);
+            char condStr[64] = {0};
+            operationToCExpression(condStr, cond, elf);
+
+            writeIndent(out, depth);
+            fprintf(out, "do {\n");
+
+            writeRecursive(out, tree, depth+1, node->info.doWhileLoop.body, elf);
+
+            writeIndent(out, depth);
+            fprintf(out, "} while(%s);\n", condStr);
+        }
+            break;
+        case WHILE_LOOP: {
+
+            Operation* cond = getCondition(tree, node->info.whileLoop.condition);
+            char condStr[64] = {0};
+            operationToCExpression(condStr, cond, elf);
+
+            writeIndent(out, depth);
+            fprintf(out, "while(%s) {\n", condStr);
+
+            writeRecursive(out, tree, depth+1, node->info.whileLoop.body, elf);
+
+            writeIndent(out, depth);
+            fprintf(out, "}\n");
+        }
+            break;
         default:
             printf("OTHER\n");
     }
@@ -185,8 +225,8 @@ void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
                 if (isLocalVaiableAddr(op->info.unaryOperand)) {
                     localVaiableAddrToName(out, op->info.unaryOperand);
                 } else {
-                    out[1] = '*';
-                    operationToCExpression(&(out[2]), op->info.unaryOperand, elf);
+                    out[0] = '*';
+                    operationToCExpression(&(out[1]), op->info.unaryOperand, elf);
                 }
             } else {
                 printf("Printing invalid unaryop: %d\n", op->kind);
@@ -204,7 +244,7 @@ void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
                     break;
                 case ADDRESS: {
                     uint8_t* val = readVAddr(elf, op->info.data.info.adr);
-                    if (val) {
+                    if (val && val[0]) {
                         out[0] = '"';
                         int i = 0;
                         int j = 1;

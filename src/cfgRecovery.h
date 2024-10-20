@@ -65,6 +65,10 @@ typedef struct _StructuredCfgNode {
         struct {
             uint body;
         } doWhileLoop;
+        
+        struct {
+            uint body;
+        } infiniteLoop;
     } info;
 
 } StructuredCfgNode;
