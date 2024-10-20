@@ -20,6 +20,9 @@ typedef enum _OperationKind {
     MUL,
     DIV,
 
+    LSHIFT,
+    RSHIFT,
+
     BW_AND,
     BW_OR,
     BW_XOR,

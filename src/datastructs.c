@@ -48,6 +48,8 @@ uint numOperands(OperationKind kind) {
         case LESS:
         case GREATER_OR_EQ:
         case LESS_OR_EQ:
+        case LSHIFT:
+        case RSHIFT:
             return 2;
         default:
             printf("Unkown number: %d\n", kind);
@@ -164,7 +166,7 @@ void printImpacts(CodeBlock* block, csh handle) {
     for (int i=0; i<block->impactCount; i++) {
         char assignee[256] = {0};
         operationToStr(block->impacts[i].impactedLocation, assignee, handle);
-        char assigned[256] = {0};
+        char assigned[1024] = {0};
         operationToStr(block->impacts[i].impact, assigned, handle);
 
         printf(" >  %s = %s;\n", assignee, assigned);
@@ -215,6 +217,12 @@ void operationToStr(Operation* op, char* outBuff, csh handle){
                 case LESS_OR_EQ:
                     operator = " <= ";
                     break;
+                case LSHIFT:
+                    operator = " << ";
+                    break;
+                case RSHIFT:
+                    operator = " >> ";
+                    break;
                 default:
                     printf("Printing invalid binaryOp\n");
             }
@@ -246,7 +254,7 @@ void operationToStr(Operation* op, char* outBuff, csh handle){
         case 0:
             switch(op->info.data.kind) {
                 case LITERAL:
-                    sprintf(outBuff, "0x%lx", op->info.data.info.lit);
+                    sprintf(outBuff, "%ld", op->info.data.info.lit);
                     break;
                 case REGISTER:
                     sprintf(outBuff, "%s", cs_reg_name(handle, op->info.data.info.reg));

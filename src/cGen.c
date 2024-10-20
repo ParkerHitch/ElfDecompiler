@@ -4,6 +4,9 @@
 #include "datastructs.h"
 #include <stdio.h>
 
+#define EXPR_LEN 256
+#define VAR_LEN 64
+
 void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, ParsedElf* elf);
 void writeLine(FILE* out, CodeImpact* impact, uint depth);
 void operationToCExpression(char* out, Operation* op, ParsedElf* elf);
@@ -33,7 +36,7 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
                 if (unit->kind == CODE_BLOCK) {
                     writeImpacts(out, unit->info.block, depth, elf);
                 } else if (unit->kind == WRITE_CALL) {
-                    char params[3][64] = {{0}, {0}, {0}};
+                    char params[3][VAR_LEN] = {{0}, {0}, {0}};
                     operationToCExpression(params[0], unit->info.writeCall.writeTo, elf);
                     operationToCExpression(params[1], unit->info.writeCall.charPtr, elf);
                     operationToCExpression(params[2], unit->info.writeCall.charLen, elf);
@@ -55,7 +58,7 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
             writeRecursive(out, tree, depth, node->info.ifThen.before, elf);
             Operation* cond = getCondition(tree, node->info.ifThen.before);
             logicalInvert(cond);
-            char condStr[64];
+            char condStr[EXPR_LEN];
             operationToCExpression(condStr, cond, elf);
             writeIndent(out, depth);
             fprintf(out, "if (%s) {\n", condStr);
@@ -67,7 +70,7 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
         case IF_THEN_ELSE: {
             writeRecursive(out, tree, depth, node->info.ifThenElse.before, elf);
             Operation* cond = getCondition(tree, node->info.ifThenElse.before);
-            char condStr[64] = {0};
+            char condStr[EXPR_LEN] = {0};
             operationToCExpression(condStr, cond, elf);
             writeIndent(out, depth);
             fprintf(out, "if (%s) {\n", condStr);
@@ -96,7 +99,7 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
         case DO_WHILE_LOOP: {
 
             Operation* cond = getCondition(tree, node->info.doWhileLoop.body);
-            char condStr[64] = {0};
+            char condStr[EXPR_LEN] = {0};
             operationToCExpression(condStr, cond, elf);
 
             writeIndent(out, depth);
@@ -111,7 +114,7 @@ void writeRecursive(FILE* out, StructuredCodeTree* tree, uint depth, uint id, Pa
         case WHILE_LOOP: {
 
             Operation* cond = getCondition(tree, node->info.whileLoop.condition);
-            char condStr[64] = {0};
+            char condStr[EXPR_LEN] = {0};
             operationToCExpression(condStr, cond, elf);
 
             writeIndent(out, depth);
@@ -148,8 +151,8 @@ void writeImpacts(FILE* out, CodeBlock* block, uint depth, ParsedElf* elf) {
         CodeImpact* impact = &block->impacts[i];
         if (impact->impactedLocation->kind == DEREF &&
             isLocalVaiableAddr(impact->impactedLocation->info.unaryOperand)) {
-            char varname[32] = {0};
-            char result[128] = {0};
+            char varname[VAR_LEN] = {0};
+            char result[EXPR_LEN] = {0};
             localVaiableAddrToName(varname, impact->impactedLocation->info.unaryOperand);
             operationToCExpression(result, impact->impact, elf);
             writeIndent(out, depth);
@@ -207,6 +210,12 @@ void operationToCExpression(char* out, Operation* op, ParsedElf* elf){
                     break;
                 case LESS_OR_EQ:
                     operator = " <= ";
+                    break;
+                case LSHIFT:
+                    operator = " << ";
+                    break;
+                case RSHIFT:
+                    operator = " >> ";
                     break;
                 default:
                     printf("Printing invalid binaryOp\n");

@@ -115,6 +115,6 @@ void setAdd(CfgNodeSet* set, uint num);
 void setSub(CfgNodeSet* set, uint num);
 CfgNodeSet setUnion(CfgNodeSet set1, CfgNodeSet set2);
 CfgNodeSet blankSet();
-
+void printNode(StructuredCodeTree* tree, StructuredCfgNode node);
 
 #endif

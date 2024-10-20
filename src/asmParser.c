@@ -441,10 +441,19 @@ CodeBlock* createCodeBlock(Elf64_Addr startAddr,
             case X86_INS_ADD:
             case X86_INS_SUB:
             case X86_INS_MUL:
+            case X86_INS_IMUL:
+            case X86_INS_SHL:
+            case X86_INS_SAL:
+            case X86_INS_SHR:
+            case X86_INS_SAR:
             case X86_INS_DIV:
+            case X86_INS_IDIV:
                 updateImpactsOfArithmetic(block, insn);
                 break;
             case X86_INS_MOV:
+            case X86_INS_MOVSXD:
+            case X86_INS_MOVSX:
+            case X86_INS_MOVZX:
             case X86_INS_MOVABS:
                 updateImpactsOfMov(block, insn);
                 break;
@@ -521,7 +530,7 @@ void updateImpactsOfMov(CodeBlock* block, cs_insn* insn){
 
 void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     cs_x86 detail = insn->detail->x86;
-    if (detail.op_count != 2){
+    if (detail.op_count != 2 && insn->id != X86_INS_IDIV){
         printf("!Bad operand count for arithmetic\n");
     }
 
@@ -529,17 +538,26 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     Operation* operation = calloc(sizeof(Operation), 1);
 
     switch(insn->id) {
+        case X86_INS_SHL:
+        case X86_INS_SAL:
+            operation->kind = LSHIFT;
+            break;
+        case X86_INS_SHR:
+        case X86_INS_SAR:
+            operation->kind = RSHIFT;
         case X86_INS_ADD:
             operation->kind = ADD;
             break;
         case X86_INS_SUB:
             operation->kind = SUB;
             break;
+        case X86_INS_IMUL:
         case X86_INS_MUL:
-            operation->kind = SUB;
+            operation->kind = MUL;
             break;
+        case X86_INS_IDIV:
         case X86_INS_DIV:
-            operation->kind = SUB;
+            operation->kind = DIV;
             break;
         default:
             // Unreachable by case in parsing loop.
@@ -548,16 +566,30 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
 
     Operation* operands[2];
 
-    for (int i=0; i<2; i++) {
-        if (detail.operands[i].type == X86_OP_REG) {
+    if (insn->id != X86_INS_IDIV) {
+        for (int i=0; i<2; i++) {
+            if (detail.operands[i].type == X86_OP_REG) {
+                // Copy value of register or just run it
+                operands[i] = copyLookupOrCreateRegOp(block, detail.operands[i].reg);
+            } else if (detail.operands[i].type == X86_OP_IMM) {
+                operands[i] = createDataOperation(LITERAL, &detail.operands[i].imm);
+            } else if (detail.operands[i].type == X86_OP_MEM) {
+                operands[i] = derefMem(block, detail.operands[i].mem);
+            } else {
+                printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
+            }
+        }
+    } else {
+        operands[0] = copyLookupOrCreateRegOp(block, X86_REG_RAX);
+        if (detail.operands[0].type == X86_OP_REG) {
             // Copy value of register or just run it
-            operands[i] = copyLookupOrCreateRegOp(block, detail.operands[i].reg);
-        } else if (detail.operands[i].type == X86_OP_IMM) {
-            operands[i] = createDataOperation(LITERAL, &detail.operands[i].imm);
-        } else if (detail.operands[i].type == X86_OP_MEM) {
-            operands[i] = derefMem(block, detail.operands[i].mem);
+            operands[1] = copyLookupOrCreateRegOp(block, detail.operands[0].reg);
+        } else if (detail.operands[0].type == X86_OP_IMM) {
+            operands[1] = createDataOperation(LITERAL, &detail.operands[0].imm);
+        } else if (detail.operands[0].type == X86_OP_MEM) {
+            operands[1] = derefMem(block, detail.operands[0].mem);
         } else {
-            printf("AAAAA! Bad operand to instruction: %s\n", insn->op_str);
+            printf("AAAAA! Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
         }
     }
 
@@ -615,23 +647,44 @@ void updateFlagOp(CodeBlock* block, cs_insn* insn, OperationKind kind) {
 
     Operation* operands[2];
 
-    for (int i=0; i<2; i++) {
-        if (detail.operands[i].type == X86_OP_REG) {
+    if (insn->id != X86_INS_IDIV) {
+        for (int i=0; i<2; i++) {
+            if (detail.operands[i].type == X86_OP_REG) {
+                // Copy value of register or just run it
+                x86_reg reg = detail.operands[i].reg;
+                if (registerIs32bit(reg))
+                    reg = get64bitParent(reg);
+                operands[i] = createDataOperation(REGISTER, &reg);
+            } else if (detail.operands[i].type == X86_OP_IMM) {
+                operands[i] = createDataOperation(LITERAL, &detail.operands[i].imm);
+            } else if (detail.operands[i].type == X86_OP_MEM) {
+                Operation* prim = memoryOpPrimitive(detail.operands[i].mem);
+                Operation* derefOp = calloc(sizeof(Operation), 1);
+                derefOp->kind = DEREF;
+                derefOp->info.unaryOperand = prim;
+                operands[i] = derefOp;
+            } else {
+                printf("AAAAA! Flag. Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
+            }
+        }
+    } else {
+        operands[0] = copyLookupOrCreateRegOp(block, X86_REG_RAX);
+        if (detail.operands[0].type == X86_OP_REG) {
             // Copy value of register or just run it
-            x86_reg reg = detail.operands[i].reg;
+            x86_reg reg = detail.operands[0].reg;
             if (registerIs32bit(reg))
                 reg = get64bitParent(reg);
-            operands[i] = createDataOperation(REGISTER, &reg);
-        } else if (detail.operands[i].type == X86_OP_IMM) {
-            operands[i] = createDataOperation(LITERAL, &detail.operands[i].imm);
-        } else if (detail.operands[i].type == X86_OP_MEM) {
-            Operation* prim = memoryOpPrimitive(detail.operands[i].mem);
+            operands[1] = createDataOperation(REGISTER, &reg);
+        } else if (detail.operands[0].type == X86_OP_IMM) {
+            operands[1] = createDataOperation(LITERAL, &detail.operands[0].imm);
+        } else if (detail.operands[0].type == X86_OP_MEM) {
+            Operation* prim = memoryOpPrimitive(detail.operands[0].mem);
             Operation* derefOp = calloc(sizeof(Operation), 1);
             derefOp->kind = DEREF;
             derefOp->info.unaryOperand = prim;
-            operands[i] = derefOp;
+            operands[1] = derefOp;
         } else {
-            printf("AAAAA! Bad operand to instruction: %s\n", insn->op_str);
+            printf("AAAAA! Flag. Bad operand to instruction: %s. Addr: 0x%lx\n", insn->op_str, insn->address);
         }
     }
     

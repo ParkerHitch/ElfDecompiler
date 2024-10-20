@@ -37,15 +37,21 @@ int main(int argc, char** argv) {
 
     ParsedProgram* program = parseMainFn(parsedElf->mainFnStart, parsedElf, &handle);
 
+    printf("\n\n#### MAIN PARSED ####\n\n");
+
     StructuredCodeTree* cfg = initBaseAndResolveDependencies(program);
 
-    deepPrintParsedProgram(program, handle);
+    printf("\n\n#### DEPS RESOLVED ####\n\n");
+
+    // deepPrintParsedProgram(program, handle);
 
     printCfg(cfg);
 
     rebuildStructure(cfg);
 
-    printCfg(cfg);
+    printf("\n\n#### STRUCTURE REBUILT ####\n\n");
+
+    // printCfg(cfg);
 
     writeC(stdout, cfg, parsedElf);
     // printCfg(cfg);
