@@ -545,6 +545,7 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
         case X86_INS_SHR:
         case X86_INS_SAR:
             operation->kind = RSHIFT;
+            break;
         case X86_INS_ADD:
             operation->kind = ADD;
             break;
@@ -621,6 +622,22 @@ void updateImpactsOfArithmetic(CodeBlock* block, cs_insn* insn){
     // char test[256] = {0};
     // operationToStr(operation, test, handle);
     // printf("Arithmetic: %s\n", test);
+    //
+    // if (operation->kind == RSHIFT) {
+    //     
+    //     printf("Width: %d\n", operation->width);
+    // }
+
+    if (operation->kind == RSHIFT &&
+        operands[1]->kind == DATA &&
+        operands[1]->info.data.kind == LITERAL &&
+        operands[1]->info.data.info.lit >= operation->width * 8) {
+        deleteOperation(operation);
+        uint zero = 0;
+
+        operation = createDataOperation(LITERAL, &zero);
+    }
+
 
     Operation** operationToUpdate = &impactToUpdate->impact;
 

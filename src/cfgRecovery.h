@@ -78,6 +78,7 @@ typedef struct _Variable {
     char* specialName;
     uint8_t width;
     bool isArray;
+    bool isParam;
 } Variable;
 
 // Closest thing to an AST we're gonna get
@@ -95,7 +96,7 @@ typedef struct _StructuredCodeTree {
 
 StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program);
 
-void populateVariableTable(StructuredCodeTree* tree);
+void updateVarTable(StructuredCodeTree* tree, CodeBlock* block);
 
 void rebuildStructure(StructuredCodeTree* tree);
 
@@ -116,5 +117,7 @@ void setSub(CfgNodeSet* set, uint num);
 CfgNodeSet setUnion(CfgNodeSet set1, CfgNodeSet set2);
 CfgNodeSet blankSet();
 void printNode(StructuredCodeTree* tree, StructuredCfgNode node);
+void appendVar(StructuredCodeTree* tree, Variable var);
+void setHandle(csh chand);
 
 #endif

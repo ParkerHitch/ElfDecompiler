@@ -3,10 +3,15 @@
 #include "asmParser.h"
 #include "capstone/x86.h"
 #include "datastructs.h"
+#include "cGen.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
+csh handleCfg;
+void setHandle(csh chand) {
+    handleCfg = chand;
+}
 // NOTE: There are potentially some really nasty bugs if it doesn't end with a return.
 // Oh well.
 StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
@@ -43,11 +48,17 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
 
         // Setup number of units and double link
         while (current->kind == CODE_BLOCK || current->kind == WRITE_CALL) {
+
+            if (current->kind == CODE_BLOCK) {
+                updateVarTable(out, current->info.block);
+            }
+
             // We're doubly linking but only within an ExecutableUnit.
             // Could be global but whatever
             current->next->previousCoupled = current;
             current = current->next;
             baseNode->numUnits++;
+
         }
         // Can't be first in cfgNode by assertion in if at start of for
         if (current->kind == JUMP_DEST) {
@@ -62,9 +73,10 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
 
         printf("Last unit: %lx\n", baseNode->lastUnit->firstInstAddr);
 
+        bool firstOne = out->numCfgNodes == 0;
         // Idk dude if I set this always to start/0 I get an error so we ball I guess
-        ExecutableUnit* needsDepVals = out->numCfgNodes == 0 ? baseNode->startUnit : baseNode->startUnit->next;
-        for (int i=out->numCfgNodes == 0 ? 0 : 1; i<baseNode->numUnits; i++) {
+        ExecutableUnit* needsDepVals = firstOne ? baseNode->startUnit : baseNode->startUnit->next;
+        for (int i= firstOne ? 0 : 1; i<baseNode->numUnits; i++) {
 
             // Don't need to worry about case where needs is 1st due to i=1 in for loop.
             uint numDependencies = 0;
@@ -89,7 +101,7 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
                     Operation* valueProvided = findAndCopyImpactOperation(provider, *toBeReplaced);
 
                     if (valueProvided) {
-                        printf("Found!");
+                        // printf("Found!");
                         deleteOperation(*toBeReplaced);
                         *toBeReplaced = valueProvided;
                         // Don't wanna replace with older info
@@ -98,9 +110,10 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
                 }
             }
 
+            // TODO: Make this an if statement before the for loop. Absolutely vile here especially for "i"
             // Function params
-            if (out->numCfgNodes == 0) {
-                printf("Checking for params\n");
+            if (firstOne) {
+                printf("Checking for params on: 0x%lx\n", needsDepVals->firstInstAddr);
                 // resolve param deps
                 for (int j=0; j<numDependencies; j++) {
                     Operation** toBeReplaced = dependencies[j];
@@ -130,9 +143,45 @@ StructuredCodeTree* initBaseAndResolveDependencies(ParsedProgram* program) {
                         dependencies[j] = NULL;
                     }
                 }
-            }
+                if (needsDepVals->kind == CODE_BLOCK) {
+                    CodeBlock* block = needsDepVals->info.block;
+                    for (int i=0; i<block->impactCount; i++) {
+                        CodeImpact* impact = &(block->impacts[i]);
+                        char opStr[64] = {0};
 
+                        operationToStr(impact->impactedLocation, opStr, handleCfg);
+
+                        if (impact->impactedLocation->kind == DEREF &&
+                            isLocalVaiableAddr(impact->impactedLocation->info.unaryOperand)) {
+
+                            // Wow
+                            int64_t offset = impact->impactedLocation->info.unaryOperand->info.binaryOperands.op2->info.data.info.lit;
+                            uint8_t width = impact->impactedLocation->width;
+
+                            // We only care about params rn
+                            if (impact->impact->kind == DATA &&
+                                impact->impact->info.data.kind == PARAM) {
+                                for (int j=0; j<out->varcount; j++){
+                                    if (out->vars[j].offset == offset) {
+                                        out->vars[j].specialName = impact->impact->info.data.info.paramInd ? "argv" : "argc";
+                                        out->vars[j].isParam = true;
+                                        printf("Var with off %ld given name %s\n", offset, out->vars[j].specialName);
+
+                                        deleteOperation(impact->impactedLocation);
+                                        impact->impactedLocation = NULL;
+
+                                        goto nextImpactP;
+                                    }
+                                }
+                            }
+                        }
+                    nextImpactP:
+                    }
+                }
+            }
             free(dependencies);
+
+
 
             needsDepVals = needsDepVals->next;
         }
@@ -396,8 +445,51 @@ void rebuildStructure(StructuredCodeTree* tree) {
     }
 }
 
+
+
+// typedef struct _Variable {
+//     int64_t offset;
+//     char* specialName;
+//     uint8_t width;
+//     bool isArray;
+// } Variable;
+
+
+void updateVarTable(StructuredCodeTree* tree, CodeBlock* block){
+    for (int i=0; i<block->impactCount; i++) {
+        CodeImpact* impact = &(block->impacts[i]);
+
+        if (impact->impactedLocation->kind == DEREF &&
+            isLocalVaiableAddr(impact->impactedLocation->info.unaryOperand)) {
+
+            // Wow
+            int64_t offset = impact->impactedLocation->info.unaryOperand->info.binaryOperands.op2->info.data.info.lit;
+            uint8_t width = impact->impactedLocation->width;
+
+            for (int j=0; j<tree->varcount; j++) {
+                if (tree->vars[j].offset == offset)
+                    // We ain't overwriting here
+                    goto nextImpact;
+            }
+
+            Variable new;
+            new.offset = offset;
+            new.width = width;
+            new.specialName = NULL;
+            new.isArray = false;
+            new.isParam = false;
+            appendVar(tree, new);
+        }
+    nextImpact:
+    }
+}
+
+
+
+
+
 void readPostorder(StructuredCodeTree* tree, uint id, bool visited[], uint postorder[], uint* postorderCount) {
-    printf("id:%d \n", id);
+    // printf("id:%d \n", id);
 
     if (visited[id-1])
         return;
@@ -497,7 +589,7 @@ void addPossiblePrevious(StructuredCodeTree *tree, uint idBefore, uint idAfter) 
     if (idAfter == 0 || idBefore == 0)
         return;
 
-    printf("Add %d, %d\n", idBefore, idAfter);
+    // printf("Add %d, %d\n", idBefore, idAfter);
     setAdd(&tree->cfgNodes[idAfter-1].possiblePredecessors, idBefore);
 
 }
@@ -600,4 +692,10 @@ CfgNodeSet blankSet(){
     CfgNodeSet out;
     memset(&out, 0, sizeof(CfgNodeSet));
     return out;
+}
+
+void appendVar(StructuredCodeTree* tree, Variable var){
+    tree->varcount++;
+    tree->vars = realloc(tree->vars, tree->varcount * sizeof(Variable));
+    tree->vars[tree->varcount-1] = var;
 }

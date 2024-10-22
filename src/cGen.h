@@ -10,4 +10,6 @@
 
 void writeC(FILE* outFile, StructuredCodeTree* tree, ParsedElf* elf);
 
+bool isLocalVaiableAddr(Operation* op);
+
 #endif // !__CGEN

@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
     if (cs_open(CS_ARCH_X86, CS_MODE_64, &handle) != CS_ERR_OK)
         return -1;
 
+    setHandle(handle);
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 
     ParsedProgram* program = parseMainFn(parsedElf->mainFnStart, parsedElf, &handle);
