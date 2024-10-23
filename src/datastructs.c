@@ -134,6 +134,8 @@ Operation* deepCopyOperation(Operation* op) {
 }
 
 bool operationsEquivalent(Operation* op1, Operation* op2){
+    if (!op1 || !op2)
+        return false;
     // if (op1->kind == op2->kind && op1->width==op2->width) {
     if (op1->kind == op2->kind) {
         switch (numOperands(op1->kind)) {

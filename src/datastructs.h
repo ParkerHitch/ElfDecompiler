@@ -64,6 +64,7 @@ typedef struct _ProgramData {
 typedef struct _Operation {
     OperationKind kind;
     uint8_t width; // How many bytes this operation results in
+
     union {
         struct {
             struct _Operation* op1;
@@ -71,14 +72,9 @@ typedef struct _Operation {
         } binaryOperands;
 
         struct _Operation* unaryOperand;
+
         ProgramData data;
     } info;
-
-    // If not NULL, the bottom "overwrittenBy->width" bits of this operation
-    // get overwritten by the the result of overwrittenBy;
-    // NOTE: NOT ACTUALLY USED.
-    // IF YOU START USING ACTUALLY ADD THIS TO LIKE DELETE & COPY FN
-    struct _Operation* overwrittenBy;
 
 } Operation;
 
@@ -89,7 +85,6 @@ typedef struct _Operation {
 typedef struct _CodeImpact {
 
     // The location that gets modified by this code
-    // Literals cannot be impacted by code, so this is either REGISTER or ADDRESS
     Operation* impactedLocation;
     // Segment this impact is located in if the location is in memory
     x86_reg segment;
@@ -104,7 +99,6 @@ typedef struct _CodeImpact {
 // Represents a bit of code that always gets executed together
 typedef struct _CodeBlock {
 
-    // I just really don't trust type sizes in C idk
     Elf64_Addr firstInstAddr;
 
     // Array of the instructions that get executed for this snippet
@@ -135,6 +129,11 @@ typedef struct _WriteCall {
     Operation* charLen;
 } WriteCall;
 
+typedef struct _JumpInsn {
+    uint destId;
+    Operation* condition;
+} JumpInsn;
+
 typedef enum _ExecutableUnitKind {
     CODE_BLOCK,
     WRITE_CALL,
@@ -143,23 +142,22 @@ typedef enum _ExecutableUnitKind {
     RETURN_NOW,
 } ExecutableUnitKind;
 
-typedef struct _JumpInsn {
-    uint destId;
-    Operation* condition;
-} JumpInsn;
-
 typedef struct _ExecutableUnit {
     ExecutableUnitKind kind;
+
     Elf64_Addr firstInstAddr;
+
     union {
         CodeBlock* block;
         WriteCall writeCall;
         uint jumpDestId;
         JumpInsn jumpInsn;
     } info;
+
     struct _ExecutableUnit* next;
+
     // DO NOT USE UNTIL AFTER CFG MADE.
-    // Ik it's jank but idc
+    // Ik it's jank
     struct _ExecutableUnit* previousCoupled;
 } ExecutableUnit;
 
